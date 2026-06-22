@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verve Exchange Response Inspector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14; --surface: #13161f; --surface2: #161923;
+      --border: #1e2330; --border2: #252d3a;
+      --text: #e2e6ef; --muted: #6a7a90; --faint: #3a4555;
+      --blue: #2563eb; --blue-light: #5cb3ff; --blue-dim: #1a2d44;
+      --green: #4cca84; --green-dim: #153024;
+      --yellow: #e8c840; --yellow-dim: #2d2415;
+      --red: #f06060; --red-dim: #2d1515;
+      --purple: #b090f0; --purple-dim: #221d30;
+    }
+
+    body { font-family: 'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding:28px 24px; }
+
+    /* ── Header ── */
+    header { display:flex; align-items:baseline; gap:10px; margin-bottom:28px; border-bottom:1px solid var(--border); padding-bottom:18px; }
+    header h1 { font-size:1.05rem; font-weight:600; color:#fff; letter-spacing:-0.01em; }
+    .badge { font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:var(--blue-dim); color:var(--blue-light); border:1px solid #2a5080; border-radius:4px; padding:2px 7px; }
+
+    /* ── Layout ── */
+    .layout { display:grid; grid-template-columns:1fr 1fr; gap:18px; max-width:1440px; }
+    @media(max-width:900px){ .layout{ grid-template-columns:1fr; } }
+    .span2 { grid-column:1/-1; }
+
+    /* ── Panel ── */
+    .panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .ph { display:flex; align-items:center; justify-content:space-between; padding:11px 15px; background:var(--surface2); border-bottom:1px solid var(--border); }
+    .ph-title { font-size:0.72rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--muted); }
+    .pb { padding:15px; }
+
+    /* ── Type selector ── */
+    .type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .type-card {
+      border:2px solid var(--border2); border-radius:8px; padding:14px 12px;
+      cursor:pointer; transition:all 0.15s; background:var(--bg); text-align:center;
+    }
+    .type-card:hover { border-color:#3a5a8a; background:#0f1520; }
+    .type-card.active { border-color:var(--blue); background:var(--blue-dim); }
+    .type-card .tc-label { font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:4px; }
+    .type-card .tc-name  { font-size:0.88rem; font-weight:600; color:#fff; margin-bottom:3px; }
+    .type-card .tc-desc  { font-size:0.72rem; color:var(--muted); line-height:1.4; }
+
+    /* ── Form ── */
+    label { display:block; font-size:0.75rem; color:var(--muted); margin-bottom:5px; font-weight:500; }
+    textarea, input[type="text"], input[type="number"] {
+      width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px;
+      color:var(--text); font-family:'SF Mono','Fira Code',monospace; font-size:0.75rem;
+      padding:9px 11px; resize:vertical; outline:none; transition:border-color 0.15s;
+    }
+    textarea:focus, input:focus { border-color:#3a6ea8; }
+    textarea.json-ok  { border-color:#1a5c38; }
+    textarea.json-err { border-color:#8b2020; }
+    .field { margin-bottom:13px; }
+    .field-row { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin-bottom:13px; }
+
+    /* Parsed summary */
+    .parsed-summary { display:none; background:#0d1520; border:1px solid #1a3a5f; border-radius:6px; padding:11px; margin-bottom:13px; font-size:0.72rem; font-family:'SF Mono','Fira Code',monospace; }
+    .parsed-summary.visible { display:block; }
+    .pr { display:flex; gap:8px; margin-bottom:3px; }
+    .pr:last-child { margin-bottom:0; }
+    .pk { color:var(--blue-light); min-width:88px; flex-shrink:0; }
+    .pv { color:#a0c8e8; word-break:break-all; }
+    .pv.vdim { color:var(--green); } .pv.vcpm { color:var(--yellow); } .pv.vwarn { color:#e8a840; }
+
+    /* Bid selector */
+    .bid-selector { display:none; margin-bottom:13px; }
+    .bid-selector.visible { display:block; }
+    select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:0.78rem; padding:9px 11px; outline:none; font-family:'SF Mono','Fira Code',monospace; }
+
+    /* Buttons */
+    button { cursor:pointer; border:none; border-radius:6px; font-size:0.8rem; font-weight:600; padding:9px 18px; transition:all 0.15s; }
+    .btn-primary { background:var(--blue); color:#fff; width:100%; margin-top:2px; }
+    .btn-primary:hover { background:#1d55d0; }
+    .btn-primary:active { transform:scale(0.98); }
+    .btn-sm { font-size:0.7rem; padding:4px 9px; background:#1e2330; color:#9ab0c8; border:1px solid #2a3040; border-radius:6px; }
+    .btn-sm:hover { background:#252b3a; }
+    .btn-link { font-size:0.7rem; color:var(--faint); cursor:pointer; text-decoration:underline; background:none; border:none; padding:0; font-family:inherit; }
+    .btn-link:hover { color:var(--muted); }
+
+    /* Overrides */
+    .overrides-toggle { font-size:0.72rem; color:#4a6a8a; cursor:pointer; text-decoration:underline; margin-bottom:9px; display:inline-block; background:none; border:none; padding:0; font-family:inherit; }
+    .overrides-section { display:none; }
+    .overrides-section.visible { display:block; }
+
+    /* ── Preview ── */
+    .preview-area {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      min-height:300px; padding:24px; background:#0a0c10; position:relative; overflow:auto;
+    }
+    .preview-placeholder { display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--faint); }
+    .preview-placeholder p { font-size:0.8rem; }
+    .ad-frame-wrapper { display:none; flex-direction:column; align-items:center; gap:11px; width:100%; }
+    .ad-frame-wrapper.visible { display:flex; }
+    .ad-label { font-size:0.65rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--faint); }
+    iframe#ad-frame { border:1px dashed #2a3a50; border-radius:4px; display:block; }
+
+    /* Status */
+    .status-bar { display:flex; align-items:center; gap:7px; font-size:0.72rem; color:var(--muted); }
+    .status-dot { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+    .status-dot.active { background:var(--green); box-shadow:0 0 6px #4cca8480; }
+
+    /* ── Log ── */
+    .log-list { list-style:none; font-family:'SF Mono','Fira Code',monospace; font-size:0.7rem; max-height:230px; overflow-y:auto; display:flex; flex-direction:column; gap:2px; }
+    .log-entry { display:grid; grid-template-columns:auto 58px 1fr; gap:7px; align-items:baseline; padding:3px 7px; border-radius:4px; background:var(--bg); }
+    .log-time { color:#4a5a70; font-size:0.65rem; }
+    .log-tag { font-size:0.63rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:1px 4px; border-radius:3px; text-align:center; }
+    .tag-info { background:var(--blue-dim); color:var(--blue-light); }
+    .tag-ok   { background:var(--green-dim); color:var(--green); }
+    .tag-warn { background:var(--yellow-dim); color:#e8a840; }
+    .tag-err  { background:var(--red-dim); color:var(--red); }
+    .tag-net  { background:var(--purple-dim); color:var(--purple); }
+    .log-msg  { color:#8a9ab0; word-break:break-all; }
+
+    /* ── Beacons ── */
+    .net-table { width:100%; border-collapse:collapse; font-size:0.7rem; font-family:'SF Mono','Fira Code',monospace; }
+    .net-table th { text-align:left; color:#4a5a70; font-weight:600; padding:3px 7px; border-bottom:1px solid var(--border); font-size:0.65rem; text-transform:uppercase; letter-spacing:0.06em; }
+    .net-table td { padding:4px 7px; border-bottom:1px solid #0f1218; color:#8a9ab0; word-break:break-all; vertical-align:top; }
+    .net-table tr:last-child td { border-bottom:none; }
+    .pill { display:inline-block; font-size:0.63rem; padding:1px 5px; border-radius:3px; font-weight:700; }
+    .pill-imp   { background:var(--blue-dim);   color:var(--blue-light); }
+    .pill-clk   { background:var(--green-dim);  color:var(--green); }
+    .pill-win   { background:var(--purple-dim); color:var(--purple); }
+    .pill-loss  { background:var(--red-dim);    color:var(--red); }
+    .pill-vast  { background:#1a2d1a;           color:#7de87d; }
+    .pill-wrap  { background:#1a1a2d;           color:#9090f0; }
+    .pill-comp  { background:#2d1a2d;           color:#d07de8; }
+    .pill-sdk   { background:#1a1a2d;           color:#7d9de8; }
+    .pill-other { background:#2a2a1e;            color:#c8b040; }
+    .net-empty  { color:var(--faint); font-style:italic; font-size:0.7rem; padding:6px; font-family:inherit; }
+    .nurl-btns  { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px; }
+
+    /* ── SDK info popup ── */
+    .sdk-info-wrap { position:relative; display:inline-flex; align-items:center; }
+    .sdk-info-btn { background:none; border:none; color:#4a6a9a; font-size:1rem; cursor:pointer; padding:1px 4px; border-radius:50%; transition:color 0.15s; line-height:1; vertical-align:middle; }
+    .sdk-info-btn:hover { color:#5cb3ff; }
+    .sdk-info-popup { display:none; position:fixed; top:60px; left:50%; transform:translateX(-50%); width:540px; max-width:calc(100vw - 40px); max-height:80vh; overflow-y:auto; background:#0d1520; border:1px solid #1a3a5f; border-radius:8px; padding:20px 22px; z-index:1000; box-shadow:0 8px 32px rgba(0,0,0,0.6); color:#8a9ab0; font-size:0.78rem; line-height:1.6; }
+    .sdk-info-wrap.open .sdk-info-popup { display:block; }
+    .sdk-info-popup h3 { font-size:0.88rem; font-weight:700; color:#fff; margin:0 0 14px; padding-right:20px; }
+    .sdk-info-popup h4 { font-size:0.76rem; font-weight:700; color:#5cb3ff; text-transform:uppercase; letter-spacing:0.06em; margin:14px 0 5px; }
+    .sdk-info-popup p { margin:0 0 8px; }
+    .sdk-info-popup pre { background:#070c14; border:1px solid #1a2a3f; border-radius:5px; padding:10px 12px; font-family:'SF Mono','Fira Code',monospace; font-size:0.7rem; color:#7db0d8; margin:6px 0 10px; white-space:pre; overflow-x:auto; }
+    .sdk-info-popup ol { padding-left:18px; margin:5px 0 8px; }
+    .sdk-info-popup ul { padding-left:18px; margin:5px 0 8px; }
+    .sdk-info-popup li { margin-bottom:6px; }
+    .sdk-info-popup code { color:#9ab0c8; background:#0a1220; padding:1px 4px; border-radius:3px; font-family:'SF Mono','Fira Code',monospace; font-size:0.85em; }
+    .sdk-info-popup strong { color:#c8d8e8; }
+    .sdk-info-close { position:absolute; top:10px; right:12px; background:none; border:none; color:#4a6a9a; font-size:14px; cursor:pointer; padding:2px 5px; border-radius:3px; }
+    .sdk-info-close:hover { color:#fff; }
+
+    /* info box */
+    .info-box { padding:9px 11px; background:#0d1520; border:1px solid #1a3a5f; border-radius:6px; font-size:0.74rem; color:var(--muted); line-height:1.55; margin-bottom:10px; }
+    .info-box strong { color:var(--blue-light); }
+    .info-box:last-child { margin-bottom:0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Verve Exchange Response Inspector</h1>
+  <span class="badge"><span style="color:#5cb3ff">P+</span> / <span style="color:#4cca84">B+</span></span>
+
+  <div class="sdk-info-wrap" id="sdkInfoWrap">
+    <button class="sdk-info-btn" onclick="document.getElementById('sdkInfoWrap').classList.toggle('open')" title="How does this tool compare to a real SDK environment?">ⓘ</button>
+    <div class="sdk-info-popup">
+      <button class="sdk-info-close" onclick="document.getElementById('sdkInfoWrap').classList.remove('open')">✕</button>
+      <h3>Tool vs. Real SDK Rendering — Beacon Firing Logic</h3>
+
+      <h4>Impression Beacon</h4>
+      <p><strong>Real HyBid SDK:</strong> Impression beacons are fired using <code>IntersectionObserver</code> — the ad must be <strong>≥50% visible for at least 1 continuous second</strong> before any impression pixel fires. This matches the IAB OMID standard. For video, the VAST <code>&lt;Impression&gt;</code> URLs fire on the first play event.</p>
+      <p><strong>This tool:</strong></p>
+      <ul style="padding-left:16px;margin:4px 0 8px;">
+        <li><strong>Types 1/2/3 (banner):</strong> The beacon interceptor captures <code>Image.src</code>, <code>fetch</code>, and <code>XHR</code> calls fired from inside the iframe — so any impression pixels the creative fires itself are logged. However, the tool does <em>not</em> add an external viewability gate for these types. If the creative fires its impression pixel unconditionally on load (common), it will fire immediately rather than after a 1s viewability threshold.</li>
+        <li><strong>Type 4 (MAX_ADM):</strong> The OMID logic <em>is</em> replicated — <code>ext.imptrackers</code> are held back and only fired once the ad frame is ≥50% visible for 1 continuous second, matching real SDK behaviour.</li>
+        <li><strong>VAST video (all types):</strong> VAST <code>&lt;Impression&gt;</code> URLs fire on the first play event — identical to the SDK.</li>
+      </ul>
+
+      <h4>Click Beacon</h4>
+      <p><strong>What the tool does</strong></p>
+      <p>The ad renders inside an <code>iframe.srcdoc</code> in a browser tab. For Types 1/2/3, the Verve wrapper then creates a second nested iframe (<code>#ctr</code>) inside that — so there are two iframe layers:</p>
+      <pre>Browser tab
+  └── iframe#ad-frame  (srcdoc, tool-injected)
+        └── iframe#ctr  (Verve wrapper JS)
+              └── actual DSP creative</pre>
+
+      <p><strong>A real mobile SDK (HyBid)</strong></p>
+      <p>The SDK renders the creative inside a WebView. The Verve wrapper also creates a nested <code>#ctr</code> iframe inside the WebView:</p>
+      <pre>Native app
+  └── WKWebView / WebView  (SDK-managed)
+        └── iframe#ctr  (Verve wrapper JS)
+              └── actual DSP creative</pre>
+
+      <p><strong>Does the extra outer iframe affect click beacon firing?</strong></p>
+      <p><strong>For the Verve wrapper script (Types 2/3) — functionally no.</strong> The click beacons in the wrapper (<code>CB[]</code>) are fired from inside the <code>#ctr</code> iframe via a click event listener using <code>new Image().src</code>. This behaviour is identical whether the wrapper runs in a <code>srcdoc</code> iframe or a native WebView.</p>
+      <p><strong>For DSP creatives that use <code>window.top</code> or <code>parent</code> traversal</strong> — there is a difference. Some creatives navigate clicks using <code>window.top.location</code> or <code>getWindowTop().open(...)</code>. In a real SDK WebView, <code>window.top</code> is still the WebView. In the tool, it escapes to the browser tab — click <em>navigation</em> opens a new browser tab rather than a deep-link or App Store redirect (expected for testing), but click <em>pixel firing</em> via <code>Image.src</code> is unaffected.</p>
+
+      <p>For <strong>Types 2/3/4</strong> (post-ad-server responses), click beacon behaviour is structurally identical to a real SDK WebView.</p>
+    </div>
+  </div>
+
+</header>
+
+<div class="layout">
+
+  <!-- Step 1: type selector -->
+  <div class="panel span2">
+    <div class="ph"><span class="ph-title">Step 1 — Select response type</span></div>
+    <div class="pb">
+      <div class="type-grid" style="grid-template-columns:repeat(4,1fr);">
+
+        <div class="type-card" id="tc-ortb-dsp" onclick="selectType('ortb-dsp')">
+          <div class="tc-label" style="color:#5cb3ff">Type 1</div>
+          <div class="tc-name">oRTB DSP Response</div>
+          <div class="tc-desc">Before Verve ad server. Raw DSP <code>adm</code> inside standard OpenRTB envelope.</div>
+        </div>
+
+        <div class="type-card" id="tc-ortb-verve" onclick="selectType('ortb-verve')">
+          <div class="tc-label" style="color:#4cca84">Type 2</div>
+          <div class="tc-name">oRTB P+ Ad Response</div>
+          <div class="tc-desc">After P+ (PubNative) ad server. Verve wrapper script in <code>adm</code>, with <code>nurl</code> / <code>lurl</code>.</div>
+        </div>
+
+        <div class="type-card" id="tc-ortb-bplus" onclick="selectType('ortb-bplus')">
+          <div class="tc-label" style="color:#e8a840">Type 3</div>
+          <div class="tc-name">oRTB B+ Ad Response</div>
+          <div class="tc-desc">After B+ (Smaato) ad server. Verve wrapper script in <code>adm</code>, with <code>burl</code> / <code>lurl</code>.</div>
+        </div>
+
+        <div class="type-card" id="tc-apiv3" onclick="selectType('apiv3')">
+          <div class="tc-label" style="color:#b07de8">Type 4</div>
+          <div class="tc-name">APIv3 / HyBid — MAX_ADM</div>
+          <div class="tc-desc">oRTB envelope with <code>admurl</code> in <code>ext.signaldata</code>. Tool fetches the MAX_ADM and renders it.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: input -->
+  <div class="panel" id="inputPanel" style="display:none">
+    <div class="ph">
+      <span class="ph-title" id="inputPanelTitle">Step 2 — Paste response JSON</span>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sm" id="exampleBtn" onclick="loadExample()">Example</button>
+        <button class="btn-sm" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+    <div class="pb">
+      <div class="field">
+        <label id="jsonLabel">Paste full response JSON</label>
+        <textarea id="bidResponseJson" rows="10" oninput="onJsonInput()"></textarea>
+      </div>
+
+      <div class="bid-selector" id="bidSelector">
+        <label>Select bid to render</label>
+        <select id="bidSelect" onchange="onBidSelect()"></select>
+      </div>
+
+      <div class="parsed-summary" id="parsedSummary"></div>
+
+      <button class="overrides-toggle" onclick="toggleOverrides()">▸ Overrides &amp; options</button>
+      <div class="overrides-section" id="overridesSection">
+        <div class="field-row">
+          <div class="field">
+            <label>Width override (px)</label>
+            <input type="number" id="overrideW" placeholder="auto from JSON" />
+          </div>
+          <div class="field">
+            <label>Height override (px)</label>
+            <input type="number" id="overrideH" placeholder="auto from JSON" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field" id="formatSelectorField" style="display:none">
+        <label>Ad Format</label>
+        <select id="adFormat">
+          <option value="banner">Banner</option>
+          <option value="interstitial">Interstitial</option>
+          <option value="rewarded">Rewarded</option>
+        </select>
+      </div>
+
+      <button class="btn-primary" onclick="renderAd()">▶ Render Ad</button>
+    </div>
+  </div>
+
+  <!-- Info / how it works -->
+  <div class="panel" id="infoPanel" style="display:none">
+    <div class="ph"><span class="ph-title">Format Details</span></div>
+    <div class="pb" id="infoPanelBody"></div>
+  </div>
+
+  <!-- Preview -->
+  <div class="panel span2" id="previewPanel" style="display:none">
+    <div class="ph">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="ph-title">Ad Preview</span>
+        <div class="status-bar">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Waiting for render</span>
+        </div>
+      </div>
+    </div>
+    <div class="preview-area">
+      <div class="preview-placeholder" id="previewPlaceholder">
+        <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
+          <rect x="6" y="10" width="36" height="28" rx="3" stroke="#3a4555" stroke-width="2"/>
+          <path d="M6 18h36" stroke="#3a4555" stroke-width="2"/>
+          <circle cx="24" cy="30" r="4" stroke="#3a4555" stroke-width="1.5"/>
+        </svg>
+        <p>Paste a response and click Render Ad</p>
+      </div>
+      <div class="ad-frame-wrapper" id="adFrameWrapper">
+        <span class="ad-label">Rendered Ad</span>
+        <iframe id="ad-frame" scrolling="no" frameborder="0"></iframe>
+        <span class="ad-label" id="adDimLabel"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="panel" id="logPanel" style="display:none">
+    <div class="ph">
+      <span class="ph-title">Event Log</span>
+      <button class="btn-link" onclick="clearLog()">clear</button>
+    </div>
+    <div class="pb" style="padding:11px;">
+      <ul class="log-list" id="logList"></ul>
+    </div>
+  </div>
+
+  <!-- Beacons -->
+  <div class="panel" id="beaconPanel" style="display:none">
+    <div class="ph">
+      <span class="ph-title">Beacons &amp; Trackers</span>
+      <button class="btn-link" onclick="clearBeacons()">clear</button>
+    </div>
+    <!-- Search & filter row -->
+    <div style="display:flex;gap:8px;padding:10px 11px 0;flex-wrap:wrap;align-items:center;">
+      <input
+        type="text"
+        id="beaconSearch"
+        placeholder="Search URL…"
+        oninput="renderBeaconTable()"
+        style="flex:1;min-width:120px;font-size:0.72rem;padding:5px 9px;height:28px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'SF Mono','Fira Code',monospace;outline:none;"
+      />
+      <select
+        id="beaconTypeFilter"
+        onchange="renderBeaconTable()"
+        style="font-size:0.72rem;padding:4px 8px;height:28px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:inherit;outline:none;cursor:pointer;"
+      >
+        <option value="">All types</option>
+        <option value="impression">Impression</option>
+        <option value="click">Click</option>
+        <option value="win">Win</option>
+        <option value="loss">Loss</option>
+        <option value="start">Start</option>
+        <option value="firstQuartile">firstQuartile</option>
+        <option value="midpoint">Midpoint</option>
+        <option value="thirdQuartile">thirdQuartile</option>
+        <option value="complete">Complete</option>
+        <option value="creativeView">creativeView</option>
+        <option value="skip">Skip</option>
+        <option value="pause">Pause</option>
+        <option value="mute">Mute</option>
+        <option value="unmute">Unmute</option>
+        <option value="companionClick">companionClick</option>
+        <option value="wrapperFetch">wrapperFetch</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="pb" style="padding:8px 11px 11px;overflow-x:auto;">
+      <div id="nurlBtns" class="nurl-btns"></div>
+      <div id="beaconEmpty" class="net-empty">No beacons fired yet.</div>
+      <div id="beaconNoMatch" class="net-empty" style="display:none;">No beacons match your filter.</div>
+      <table class="net-table" id="beaconTable" style="display:none;">
+        <thead><tr><th>Type</th><th>Time</th><th>URL</th></tr></thead>
+        <tbody id="beaconBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /layout -->
+
+<script>
+// Close SDK info popup when clicking outside
+document.addEventListener('click', function(e){
+  var wrap = document.getElementById('sdkInfoWrap');
+  if(wrap && wrap.classList.contains('open') && !wrap.contains(e.target)){
+    wrap.classList.remove('open');
+  }
+});
+
+// ── State ────────────────────────────────────────────────────────────────────
+var currentType = null;
+var parsedBids  = [];
+var activeBid   = null;
+var beacons     = [];
+
+// ── Type selection ────────────────────────────────────────────────────────────
+var TYPE_INFO = {
+  'ortb-dsp': {
+    title: 'oRTB DSP Bid Response',
+    label: 'Step 2 — Paste oRTB DSP bid response JSON',
+    info: [
+      '<strong>Format:</strong> Standard OpenRTB 2.x — <code>seatbid[].bid[].adm</code> contains raw DSP HTML/JS creative.',
+      '<strong>Macros:</strong> <code>${AUCTION_PRICE}</code>, <code>${AUCTION_MIN_TO_WIN}</code> are resolved with the bid price before rendering.',
+      '<strong>Beacons:</strong> Impression and click trackers are embedded inside the adm — they fire from within the rendered creative. Use DevTools Network for nested iframes.',
+      '<strong>nurl/lurl:</strong> Win and loss notice URLs in the bid object — use the manual fire buttons after parsing.',
+      '<strong>burl:</strong> If present, this is our supply-side billing URL — the publisher is expected to fire it when a billable impression occurs.'
+    ]
+  },
+  'ortb-verve': {
+    title: 'oRTB P+ Ad Response',
+    label: 'Step 2 — Paste oRTB P+ ad response JSON',
+    info: [
+      '<strong>Format:</strong> Standard OpenRTB 2.x from the P+ (PubNative) ad server. The <code>adm</code> is Verve\'s wrapper script which base64-decodes and renders the DSP creative inside a nested <code>#ctr</code> iframe.',
+      '<strong>MRAID:</strong> A stub is injected before the adm so <code>window.mraid</code> calls don\'t throw.',
+      '<strong>nurl/lurl:</strong> Explicit win/loss notice URLs in the bid — use manual fire buttons. Not auto-fired on render.',
+      '<strong>burl:</strong> If present, this is our supply-side billing URL — the publisher is expected to fire it when a billable impression occurs.',
+      '<strong>Click beacons:</strong> Fired inside the nested <code>#ctr</code> iframe — visible in DevTools Network tab.'
+    ]
+  },
+  'ortb-bplus': {
+    title: 'oRTB B+ Ad Response',
+    label: 'Step 2 — Paste oRTB B+ (Smaato) ad response JSON',
+    info: [
+      '<strong>Format:</strong> Standard OpenRTB 2.x from the B+ (Smaato) ad server. The <code>adm</code> uses the same Verve wrapper script pattern as P+, rendering the DSP creative inside a nested <code>#ctr</code> iframe.',
+      '<strong>burl:</strong> Supply-side billing notice — this is our URL that the publisher is expected to fire when a billable impression occurs. Fire it here to simulate publisher-side billing.',
+      '<strong>nurl:</strong> Win notice — fired by us to confirm auction win. Present alongside <code>burl</code> in some responses.',
+      '<strong>lurl:</strong> Loss notice URL — manual fire button.',
+      '<strong>Tracking domain:</strong> <code>*.track.smaato.net</code> / <code>got-prod-gcp-ap-*.track.smaato.net</code>.',
+      '<strong>Click beacons:</strong> Fired inside the nested <code>#ctr</code> iframe — visible in DevTools Network tab.'
+    ]
+  },
+  'apiv3': {
+    title: 'APIv3 / HyBid MAX_ADM (oRTB with admurl)',
+    label: 'Step 2 — Paste oRTB response with ext.signaldata admurl',
+    info: [
+      '<strong>Format:</strong> Standard oRTB envelope. The creative is NOT in <code>adm</code> — instead <code>bid.ext.signaldata</code> (a JSON string) contains an <code>admurl</code> pointing to the MAX_ADM on Verve\'s cache server.',
+      '<strong>Flow:</strong> Tool parses the oRTB JSON → extracts <code>admurl</code> from <code>ext.signaldata</code> → fetches it → gets the HyBid APIv3 response (<code>ads[].assets[].data.html</code>) → renders it.',
+      '<strong>Verve impression beacons:</strong> <code>ext.imptrackers[]</code> are fired when the ad is <strong>≥50% visible for 1 continuous second</strong> — matching the IAB OMID standard used by the HyBid SDK. Also available as manual buttons.',
+      '<strong>Click beacons:</strong> MAX_ADM <code>beacons[]</code> with type <code>click</code> are <strong>auto-fired when the ad is clicked</strong> (detected via window focus change). Also available as manual buttons.',
+      '<strong>nurl / lurl:</strong> Win/loss notice URLs from the oRTB bid — manual fire buttons only.'
+    ]
+  }
+};
+
+function selectType(t) {
+  currentType = t;
+  ['ortb-dsp','ortb-verve','ortb-bplus','apiv3'].forEach(function(k) {
+    document.getElementById('tc-'+k).classList.toggle('active', k===t);
+  });
+  var info = TYPE_INFO[t];
+  document.getElementById('inputPanelTitle').textContent = info.title;
+  document.getElementById('jsonLabel').textContent = info.label;
+  document.getElementById('infoPanelBody').innerHTML = info.info.map(function(s){
+    return '<div class="info-box">'+s+'</div>';
+  }).join('');
+
+  // Show format selector only for Type 4
+  var fmtField = document.getElementById('formatSelectorField');
+  var fmtSel   = document.getElementById('adFormat');
+  if(t === 'apiv3'){
+    fmtField.style.display = '';
+    fmtSel.innerHTML =
+      '<option value="banner">Banner</option>'+
+      '<option value="interstitial" selected>Interstitial</option>'+
+      '<option value="rewarded">Rewarded</option>';
+  } else {
+    fmtField.style.display = 'none';
+  }
+
+  // Reset
+  document.getElementById('bidResponseJson').value = '';
+  document.getElementById('bidResponseJson').className = '';
+  hideParsed();
+
+  ['inputPanel','infoPanel','previewPanel','logPanel','beaconPanel'].forEach(function(id){
+    document.getElementById(id).style.display = '';
+  });
+
+  log('Selected type: '+info.title, 'info');
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+function log(msg, type) {
+  type = type||'info';
+  var list = document.getElementById('logList');
+  var li = document.createElement('li');
+  li.className = 'log-entry';
+  var tc = {info:'tag-info',ok:'tag-ok',warn:'tag-warn',err:'tag-err',net:'tag-net'}[type]||'tag-info';
+  var tl = {info:'INFO',ok:'OK',warn:'WARN',err:'ERROR',net:'NET'}[type]||'INFO';
+  var now = new Date();
+  var ts = now.toTimeString().slice(0,8)+'.'+String(now.getMilliseconds()).padStart(3,'0');
+  li.innerHTML='<span class="log-time">'+ts+'</span><span class="log-tag '+tc+'">'+tl+'</span><span class="log-msg">'+esc(msg)+'</span>';
+  list.prepend(li);
+}
+function clearLog(){ document.getElementById('logList').innerHTML=''; }
+
+// ── Beacons ───────────────────────────────────────────────────────────────────
+function addBeacon(type, url, manual) {
+  var now=new Date(), ts=now.toTimeString().slice(0,8);
+  beacons.push({type:type,url:url,ts:ts,manual:!!manual});
+  renderBeaconTable();
+  log('Beacon ['+type+']: '+url.slice(0,100)+(url.length>100?'…':''),'net');
+}
+function classifyUrl(url) {
+  var u=url.toLowerCase();
+  if(/\/impression|\/imp\?|px=1|impression_track|imptracking/.test(u)) return 'impression';
+  if(/\/click|\/clk|click_track|clickbeacon/.test(u)) return 'click';
+  if(/\/winnotice|\/win[^d]/.test(u)) return 'win';
+  if(/\/lossnotice|\/loss/.test(u)) return 'loss';
+  return 'other';
+}
+
+// For VAST events fired by name (not URL-classified)
+function addBeaconByName(eventName, url, manual){
+  var now=new Date(), ts=now.toTimeString().slice(0,8);
+  beacons.push({type:eventName, url:url, ts:ts, manual:!!manual});
+  renderBeaconTable();
+  log('Beacon ['+eventName+']: '+url.slice(0,100)+(url.length>100?'…':''),'net');
+}
+
+function pill(t){
+  var videoEvents=['start','firstQuartile','midpoint','thirdQuartile','complete','creativeView','skip','pause','resume','mute','unmute','fullscreen','expand','collapse','rewind','acceptInvitation','close','wrapperFetch'];
+  var m={
+    impression:'pill-imp', click:'pill-clk', win:'pill-win', loss:'pill-loss',
+    companionClick:'pill-comp', companion_ad_event:'pill-comp',
+    sdk_event:'pill-sdk', custom_endcard_event:'pill-sdk',
+    autostorekit_event:'pill-sdk', skoverlay_event:'pill-sdk',
+    wrapperFetch:'pill-wrap',
+    other:'pill-other'
+  };
+  if(videoEvents.indexOf(t)!==-1) return '<span class="pill pill-vast">'+t+'</span>';
+  return '<span class="pill '+(m[t]||'pill-other')+'">'+t.toUpperCase()+'</span>';
+}
+function renderBeaconTable(){
+  var tbody   = document.getElementById('beaconBody');
+  var table   = document.getElementById('beaconTable');
+  var empty   = document.getElementById('beaconEmpty');
+  var noMatch = document.getElementById('beaconNoMatch');
+  var searchEl= document.getElementById('beaconSearch');
+  var filterEl= document.getElementById('beaconTypeFilter');
+  var query      = searchEl  ? searchEl.value.toLowerCase().trim() : '';
+  var typeFilter = filterEl  ? filterEl.value.toLowerCase()        : '';
+
+  if(!beacons.length){
+    table.style.display='none'; empty.style.display='block';
+    if(noMatch) noMatch.style.display='none';
+    return;
+  }
+
+  var filtered = beacons.filter(function(b){
+    var typeMatch = !typeFilter || b.type.toLowerCase()===typeFilter;
+    var urlMatch  = !query || b.url.toLowerCase().includes(query) || b.type.toLowerCase().includes(query);
+    return typeMatch && urlMatch;
+  });
+
+  empty.style.display='none';
+  if(!filtered.length){
+    table.style.display='none';
+    if(noMatch) noMatch.style.display='block';
+    return;
+  }
+  if(noMatch) noMatch.style.display='none';
+  table.style.display='table';
+  tbody.innerHTML=filtered.map(function(b){
+    var urlDisplay=esc(b.url);
+    if(query && b.url.toLowerCase().includes(query)){
+      var re=new RegExp('('+query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+      urlDisplay=esc(b.url).replace(re,'<mark style="background:#2a4a2a;color:#7de87d;border-radius:2px;">$1</mark>');
+    }
+    return '<tr><td>'+pill(b.type)+'</td><td>'+b.ts+(b.manual?' <em style="color:#4a5a70">(manual)</em>':'')+'</td><td>'+urlDisplay+'</td></tr>';
+  }).join('');
+}
+function clearBeacons(){
+  beacons=[];
+  var s=document.getElementById('beaconSearch'); if(s) s.value='';
+  var f=document.getElementById('beaconTypeFilter'); if(f) f.value='';
+  renderBeaconTable();
+}
+
+window.addEventListener('message', function(e){
+  if(!e.data || e.data.type !== 'beacon' || !e.data.url) return;
+  var url = e.data.url;
+  // VAST tracking events are reported by event name rather than URL alone
+  var vastEvents = ['start','firstQuartile','midpoint','thirdQuartile','complete','click','impression'];
+  var eventName = e.data.eventName || null;
+  if(eventName && vastEvents.indexOf(eventName) !== -1){
+    addBeaconByName(eventName, url, false);
+  } else {
+    addBeacon(classifyUrl(url), url, false);
+  }
+});
+
+// ── JSON parsing ──────────────────────────────────────────────────────────────
+function onJsonInput(){
+  var raw=document.getElementById('bidResponseJson').value.trim();
+  var ta=document.getElementById('bidResponseJson');
+  if(!raw){ta.className='';hideParsed();return;}
+  try{
+    var resp=JSON.parse(raw);
+    ta.className='json-ok';
+    if(currentType==='apiv3') parseApiv3Ortb(resp);
+    else parseOrtb(resp);
+  }catch(e){
+    ta.className='json-err';
+    hideParsed();
+    log('JSON parse error: '+e.message,'err');
+  }
+}
+
+// ── Ad Template ID detection (P+ / B+ wrapper adm) ───────────────────────────
+var AD_TEMPLATE_NAMES = {
+  '1':  'Default',
+  '2':  'MRAID Expandable',
+  '3':  'Interstitial',
+  '4':  'Native',
+  '5':  'Video Interstitial',
+  '6':  'Rewarded Video',
+  '7':  'Banner MRAID',
+  '8':  'Medium Rectangle (MREC)',
+  '9':  'Leaderboard'
+};
+
+function extractAdTemplateId(adm){
+  if(!adm) return null;
+  var m = adm.match(/data-tid=["'](\d+)["']/);
+  return m ? m[1] : null;
+}
+
+function isNativeInBanner(adm){
+  if(!adm) return false;
+  var t = adm.trim();
+  // Native-in-banner uses the pubnative-wrapper template — starts with <style>.pubnative-wrapper
+  // or has it very early (within the first 200 chars after trimming)
+  return t.indexOf('.pubnative-wrapper') !== -1 && t.indexOf('.pubnative-wrapper') < 200;
+}
+
+function adTemplateLabel(tid){
+  if(!tid) return null;
+  var name = AD_TEMPLATE_NAMES[tid];
+  return 'Template '+tid+(name ? ' — '+name : ' — Unknown');
+}
+
+// ── oRTB parser (types 1, 2, 3) ──────────────────────────────────────────────
+function parseOrtb(resp){
+  parsedBids=[];
+  var cur=resp.cur||'USD';
+  if(!resp.seatbid||!resp.seatbid.length){log('No seatbid found','warn');hideParsed();return;}
+  resp.seatbid.forEach(function(seat){
+    (seat.bid||[]).forEach(function(bid){
+      parsedBids.push({
+        _fmt: currentType,
+        label: 'Bid '+(parsedBids.length+1)+' — '+(bid.w||'?')+'×'+(bid.h||'?')+' @ '+(bid.price||0).toFixed(4)+' '+cur,
+        adm:  bid.adm||'',
+        price:bid.price||0, cur:cur,
+        w:bid.w||0, h:bid.h||0,
+        crid: bid.crid||'', adomain:(bid.adomain||[]).join(', '),
+        nurl: bid.nurl||'', lurl:bid.lurl||'', burl:bid.burl||'',
+        adTemplateid: extractAdTemplateId(bid.adm||''),
+        nativeInBanner: isNativeInBanner(bid.adm||'')
+      });
+    });
+  });
+  if(!parsedBids.length){log('No bids found','warn');hideParsed();return;}
+  populateBidSelector();
+  activeBid=parsedBids[0];
+  showParsedOrtb(activeBid);
+  if(activeBid.nativeInBanner) log('native_in_banner format detected (pubnative-wrapper template)','info');
+  if(activeBid.adTemplateid) log('Ad Template ID detected: '+adTemplateLabel(activeBid.adTemplateid),'info');
+  log('Parsed '+parsedBids.length+' oRTB bid(s)','ok');
+}
+
+function showParsedOrtb(bid){
+  var el=document.getElementById('parsedSummary');
+  el.className='parsed-summary visible';
+  var trimmed = (bid.adm||'').trim();
+  var isVastXml = /^<VAST[\s>]/i.test(trimmed);
+  var isVastUrl = !isVastXml && /^https?:\/\//i.test(trimmed) && !/^</.test(trimmed);
+  var nib       = bid.nativeInBanner;
+  var hasMraid  = !isVastXml && !isVastUrl && (bid.adm.includes('mraid.js')||bid.adm.includes('mraid.getState'));
+  var fmtLabel  = isVastXml ? '🎬 VAST inline XML' : isVastUrl ? '🎬 VAST URL' : nib ? '🖼 Native-in-Banner' : '🖼 Banner / HTML';
+  var isBplus   = bid._fmt === 'ortb-bplus';
+  el.innerHTML=
+    prow('format',  fmtLabel, isVastXml||isVastUrl ? 'vdim' : '')+
+    prow('size',    bid.w+'×'+bid.h+' px','vdim')+
+    prow('price',   bid.price.toFixed(4)+' '+bid.cur,'vcpm')+
+    prow('crid',    bid.crid||'—')+
+    prow('adomain', bid.adomain||'—')+
+    // P+/DSP: nurl is our win notice
+    (!isBplus ? prow('nurl', bid.nurl?'✓ present':'✗ none', bid.nurl?'':'vwarn') : '')+
+    // P+/DSP: burl if present = our supply billing notice (publisher fires on render)
+    (!isBplus && bid.burl ? prow('burl','✓ present (supply billing notice)') : '')+
+    // B+: burl = supply billing notice publisher fires; nurl = our win notice
+    (isBplus  ? prow('burl', bid.burl?'✓ present (supply billing notice)':'✗ none', bid.burl?'':'vwarn') : '')+
+    (isBplus && bid.nurl ? prow('nurl','✓ present (win notice)') : '')+
+    (bid.lurl ? prow('lurl','✓ present') : '')+
+    (hasMraid ? prow('mraid','⚠ stub injected','vwarn') : '')+
+    (nib ? prow('ad format','native_in_banner — pubnative-wrapper template detected','vdim') : '')+
+    (bid.adTemplateid ? prow('ad template', adTemplateLabel(bid.adTemplateid), 'vdim') : '');
+  buildNurlButtons(bid);
+}
+
+// ── APIv3 / MAX_ADM: parse oRTB → extract admurl → fetch → render ─────────────
+function parseApiv3Ortb(resp){
+  parsedBids=[];
+  var cur=resp.cur||'USD';
+  if(!resp.seatbid||!resp.seatbid.length){log('No seatbid found','warn');hideParsed();return;}
+
+  resp.seatbid.forEach(function(seat){
+    (seat.bid||[]).forEach(function(bid){
+      // Parse signaldata (JSON string inside ext)
+      var signaldata={};
+      try{
+        if(bid.ext&&bid.ext.signaldata){
+          signaldata=JSON.parse(bid.ext.signaldata);
+        }
+      }catch(e){ log('Could not parse ext.signaldata: '+e.message,'warn'); }
+
+      var admurl=signaldata.admurl||'';
+      // Fix escaped & in admurl
+      admurl=admurl.replace(/\\u0026/g,'&').replace(/&amp;/g,'&');
+
+      var imptrackers=(bid.ext&&bid.ext.imptrackers)||[];
+
+      parsedBids.push({
+        _fmt:'apiv3',
+        label:'Bid '+(parsedBids.length+1)+' — '+(bid.w||'?')+'×'+(bid.h||'?')+' @ '+(bid.price||0).toFixed(4)+' '+cur,
+        adm:'',           // filled after fetch
+        price:bid.price||0, cur:cur,
+        w:bid.w||0, h:bid.h||0,
+        crid:bid.crid||'', adomain:(bid.adomain||[]).join(', '),
+        nurl:bid.nurl||'', lurl:bid.lurl||'', burl:bid.burl||'',
+        admurl:admurl,
+        imptrackers:imptrackers,
+        apiv3Beacons:[],
+        crtype:(bid.ext&&bid.ext.crtype)||''
+      });
+    });
+  });
+
+  if(!parsedBids.length){log('No bids found','warn');hideParsed();return;}
+  populateBidSelector();
+  activeBid=parsedBids[0];
+  showParsedApiv3Pending(activeBid);
+  log('Parsed '+parsedBids.length+' oRTB bid(s) — admurl found, ready to fetch','ok');
+}
+
+function showParsedApiv3Pending(bid){
+  var el=document.getElementById('parsedSummary');
+  el.className='parsed-summary visible';
+  el.innerHTML=
+    prow('size',        bid.w+'×'+bid.h+' px','vdim')+
+    prow('price',       bid.price.toFixed(4)+' '+bid.cur,'vcpm')+
+    prow('crid',        bid.crid||'—')+
+    prow('crtype',      bid.crtype||'—')+
+    prow('admurl',      bid.admurl?'✓ found':'✗ missing', bid.admurl?'':'vwarn')+
+    prow('imptrackers', bid.imptrackers.length+' Verve tracker(s)')+
+    prow('nurl',        bid.nurl?'✓ present':'✗ none', bid.nurl?'':'vwarn')+
+    (bid.lurl?prow('lurl','✓ present'):'')+
+    prow('MAX_ADM',     bid.adm?'✓ fetched':'⏳ click Render to fetch','vwarn');
+  buildApiv3Buttons(bid);
+}
+
+function showParsedApiv3Ready(bid){
+  var el=document.getElementById('parsedSummary');
+  el.className='parsed-summary visible';
+  var isVast = bid._admType === 'vast';
+  var nib    = !isVast && isNativeInBanner(bid.adm||'');
+  var hasMraid = !isVast && (bid.adm.includes('mraid.js')||bid.adm.includes('mraid.getState'));
+  var fmtLabel = isVast ? '🎬 Video / VAST' : nib ? '🖼 Native-in-Banner' : '🖼 Banner / HTML';
+  var adExp  = bid.adExperience;
+  var selectedFmt = document.getElementById('adFormat') ? document.getElementById('adFormat').value : 'banner';
+  var isFullscreen = selectedFmt === 'interstitial' || selectedFmt === 'rewarded';
+  var adExpLabel = isFullscreen && adExp === 'performance' ? '⚡ Performance' : isFullscreen && adExp === 'brand' ? '✦ Brand' : null;
+  el.innerHTML=
+    prow('format',      fmtLabel, 'vdim')+
+    (adExpLabel ? prow('ad experience', adExpLabel, adExp==='performance'?'vdim':'vcpm') : '')+
+    prow('size',        bid.w+'×'+bid.h+' px','vdim')+
+    prow('price',       bid.price.toFixed(4)+' '+bid.cur,'vcpm')+
+    prow('crid',        bid.crid||'—')+
+    prow('crtype',      bid.crtype||'—')+
+    prow('imptrackers', bid.imptrackers.length+' Verve tracker(s)')+
+    prow('MAX_ADM',     '✓ fetched'+(isVast ? (bid.vastContent?' (inline VAST)':bid.vastUrl?' (VAST URL)':' (unknown structure)') : ' ('+bid.adm.length+' chars)'),'vdim')+
+    prow('adm beacons', bid.apiv3Beacons.length+' in MAX_ADM')+
+    (hasMraid ? prow('mraid','⚠ stub injected','vwarn') : '')+
+    (nib ? prow('ad format','native_in_banner — pubnative-wrapper template detected','vdim') : '');
+  buildApiv3Buttons(bid);
+}
+
+function buildApiv3Buttons(bid){
+  var btns=document.getElementById('nurlBtns');
+  btns.innerHTML='';
+
+  // Verve imptrackers (from oRTB ext) — shown as manual buttons AND auto-fired on render
+  bid.imptrackers.forEach(function(url, i){
+    var resolved=url
+      .replace(/\$\{AUCTION_PRICE\}/g,bid.price)
+      .replace(/\$\{AUCTION_MIN_TO_WIN\}/g,bid.price)
+      .replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,bid.price);
+    var btn=document.createElement('button'); btn.className='btn-sm';
+    btn.textContent='📡 Fire imptracker '+(i+1);
+    (function(u){ btn.onclick=function(){ new Image().src=u; addBeacon('impression',u,true); }; })(resolved);
+    btns.appendChild(btn);
+  });
+
+  // nurl / lurl
+  if(bid.nurl){
+    var nb=document.createElement('button'); nb.className='btn-sm'; nb.textContent='🔔 Fire nurl (win notice)';
+    nb.title='Our supply-side win notice';    (function(b){ nb.onclick=function(){
+      var u=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
+      new Image().src=u; addBeacon('win',u,true);
+    };})(bid); btns.appendChild(nb);
+  }
+  if(bid.lurl){
+    var lb=document.createElement('button'); lb.className='btn-sm'; lb.textContent='🔕 Fire lurl (loss)';
+    (function(b){ lb.onclick=function(){
+      var u=b.lurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_LOSS\}/g,'0');
+      new Image().src=u; addBeacon('loss',u,true);
+    };})(bid); btns.appendChild(lb);
+  }
+
+  // MAX_ADM beacons (populated after fetch)
+  // Standard types (click, impression) are fireable; others are SDK-specific templates
+  var sdkTypes=['companion_ad_event','sdk_event','custom_endcard_event','autostorekit_event','skoverlay_event'];
+  bid.apiv3Beacons.forEach(function(b){
+    var url=b.data&&b.data.url; if(!url) return;
+    var isSdk = sdkTypes.indexOf(b.type)!==-1;
+    var btn=document.createElement('button'); btn.className='btn-sm';
+    if(isSdk){
+      // SDK-specific — contains [EVENTTYPE] template macro, show as info only
+      btn.textContent='ℹ '+b.type;
+      btn.title='SDK-managed event — contains [EVENTTYPE] macro, fired by HyBid SDK';
+      btn.style.opacity='0.6'; btn.style.cursor='default';
+    } else {
+      btn.textContent='🔔 Fire '+b.type+' beacon';
+      (function(u,t){ btn.onclick=function(){ new Image().src=u; addBeacon(t,u,true); }; })(url, b.type);
+    }
+    btns.appendChild(btn);
+  });
+}
+
+// Auto-fire imptrackers once viewability threshold is met, and wire up click beacon detection
+function apiv3PostRender(bid, iframe){
+  var impTrackersFired = false;
+
+  // ── Viewability-gated impression firing (mirrors OMID: 50% visible for 1 continuous second) ──
+  if(bid.imptrackers.length > 0){
+    var viewTimer = null;
+
+    var observer = new IntersectionObserver(function(entries){
+      var entry = entries[0];
+      if(entry.intersectionRatio >= 0.5){
+        // Ad is ≥50% visible — start the 1s timer
+        if(!viewTimer){
+          viewTimer = setTimeout(function(){
+            if(!impTrackersFired){
+              impTrackersFired = true;
+              observer.disconnect();
+              bid.imptrackers.forEach(function(url){
+                var resolved = url
+                  .replace(/\$\{AUCTION_PRICE\}/g, bid.price)
+                  .replace(/\$\{AUCTION_MIN_TO_WIN\}/g, bid.price)
+                  .replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g, bid.price);
+                new Image().src = resolved;
+                addBeacon('impression', resolved, false);
+                log('Viewability met (≥50% for 1s) — fired imptracker: '+resolved.slice(0,80)+'…', 'net');
+              });
+            }
+          }, 1000);
+          log('Ad ≥50% visible — impression fires in 1s if it stays in view…', 'info');
+        }
+      } else {
+        // Ad dropped below 50% — cancel the timer
+        if(viewTimer){
+          clearTimeout(viewTimer);
+          viewTimer = null;
+          log('Ad left view before 1s — impression timer reset', 'warn');
+        }
+      }
+    }, {
+      threshold: [0, 0.5, 1.0]
+    });
+
+    observer.observe(iframe);
+    log('Viewability observer active — imptracker fires when ad is ≥50% visible for 1s (OMID standard)', 'info');
+  }
+
+  // ── Click beacon detection via window blur/focus ──
+  var clickBeacons = bid.apiv3Beacons.filter(function(b){ return b.type==='click' && b.data && b.data.url; });
+  if(!clickBeacons.length) return;
+
+  var clickFired = false;
+  function onWindowBlur(){
+    setTimeout(function(){
+      if(document.activeElement === iframe && !clickFired){
+        clickFired = true;
+        clickBeacons.forEach(function(b){
+          new Image().src = b.data.url;
+          addBeacon('click', b.data.url, false);
+          log('Auto-fired MAX_ADM click beacon: '+b.data.url.slice(0,80)+'…', 'net');
+        });
+        window.removeEventListener('blur', onWindowBlur);
+      }
+    }, 100);
+  }
+  window.addEventListener('blur', onWindowBlur);
+  log('Click beacon watcher active — '+clickBeacons.length+' click beacon(s) will fire on ad click', 'info');
+}
+
+// Fetch admurl and extract the creative asset (htmlbanner or vast)
+function fetchAdmurl(bid, callback){
+  if(!bid.admurl){ log('No admurl in bid','err'); callback(null); return; }
+  log('Fetching admurl: '+bid.admurl.slice(0,80)+'…','info');
+  fetch(bid.admurl)
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(maxAdm){
+      // Detect expired or error response from cache server
+      if(maxAdm.status === 'error'){
+        var msg = maxAdm.error_message || 'unknown error';
+        var isExpired = /expir/i.test(msg);
+        log(isExpired
+          ? 'admurl has expired — MAX_ADM cache links are valid for ~1 hour. Re-fetch a fresh bid response and try again.'
+          : 'admurl returned error: '+msg, 'err');
+        callback(null); return;
+      }
+
+      var ad = (maxAdm.ads||[])[0];
+      if(!ad){ log('No ads[] in MAX_ADM response','err'); callback(null); return; }
+
+      // Find htmlbanner asset (Banner)
+      var htmlAsset = null;
+      // Find vast asset (Video) — type can be 'vast', 'vast2', 'vast3', 'vast4', 'video'
+      var vastAsset = null;
+      // Find custom endcard asset
+      var customEndcardAsset = null;
+
+      (ad.assets||[]).forEach(function(asset){
+        if(asset.type==='htmlbanner' && asset.data && asset.data.html) htmlAsset = asset;
+        if(/^(vast|vast2|vast3|vast4|video)$/i.test(asset.type||'') && asset.data) vastAsset = asset;
+        if(asset.type==='custom_endcard' && asset.data && asset.data.html) customEndcardAsset = asset;
+      });
+
+      // Parse remoteconfigs and adexperience from meta
+      var metaMap = {};
+      (ad.meta||[]).forEach(function(m){ metaMap[m.type] = m.data; });
+      var adExperience = (metaMap.adexperience && metaMap.adexperience.text) || null;
+      var prefix = adExperience === 'brand' ? 'bc_' : 'pc_';
+      var rawCfg = (metaMap.remoteconfigs && metaMap.remoteconfigs.jsondata) || {};
+
+      // Store adExperience on bid directly (available for both banner and video)
+      bid.adExperience = adExperience;
+
+      // Helper: get config value, preferring prefixed key, falling back to unprefixed
+      function cfg(key){
+        var prefixed = prefix + key;
+        return rawCfg.hasOwnProperty(prefixed) ? rawCfg[prefixed] : rawCfg[key];
+      }
+
+      bid.vastCfg = {
+        audiostate:          rawCfg.audiostate || 'muted',
+        skipOffset:          cfg('video_skip_offset') != null ? Number(cfg('video_skip_offset')) : 5,
+        rewardedSkipOffset:  cfg('rewarded_video_skip_offset') != null ? Number(cfg('rewarded_video_skip_offset')) : 30,
+        endcardEnabled:      cfg('endcardenabled') !== false,
+        endcardCloseDelay:   cfg('endcard_close_delay') != null ? Number(cfg('endcard_close_delay')) : 3,
+        hideControls:        cfg('hide_controls') === true,
+        fullscreenClick:     rawCfg.fullscreen_clickability !== false,
+        customEndcardEnabled:rawCfg.custom_endcard_enabled === true,
+        closeAfterFinished:  rawCfg.close_inter_after_finished === true,
+        adExperience:        adExperience,
+        // Icon size: 20px default; 30px when pc_reduced_icon_sizes is explicitly false
+        iconSize:            rawCfg.pc_reduced_icon_sizes === false ? 30 : 20
+      };
+
+      bid.customEndcardHtml = customEndcardAsset ? customEndcardAsset.data.html : '';
+
+      if(bid.vastCfg.customEndcardEnabled && bid.customEndcardHtml){
+        log('Custom endcard found ('+bid.customEndcardHtml.length+' chars), will show after companion','info');
+      }
+      log('Ad experience: '+(adExperience||'not set')+' → using '+prefix+'* configs. audiostate='+(bid.vastCfg?bid.vastCfg.audiostate:'n/a')+', skipOffset='+(bid.vastCfg?bid.vastCfg.skipOffset:'n/a')+'s, endcardCloseDelay='+(bid.vastCfg?bid.vastCfg.endcardCloseDelay:'n/a')+'s','info');
+
+      if(!htmlAsset && !vastAsset){
+        // Log the raw asset types we actually got so it's debuggable
+        var types = (ad.assets||[]).map(function(a){ return a.type; }).join(', ');
+        log('No renderable asset found in MAX_ADM. Asset types present: ['+types+']','err');
+        callback(null); return;
+      }
+
+      bid.apiv3Beacons = ad.beacons || [];
+
+      if(htmlAsset){
+        bid._admType = 'html';
+        bid.adm = htmlAsset.data.html;
+        if(htmlAsset.data.w) bid.w = htmlAsset.data.w;
+        if(htmlAsset.data.h) bid.h = htmlAsset.data.h;
+        log('MAX_ADM fetched — Banner HTML, '+bid.adm.length+' chars, '+bid.apiv3Beacons.length+' beacon(s)','ok');
+      } else {
+        bid._admType = 'vast';
+        // VAST content field name varies: vast2, vast, xml, value (inline XML) or url, vasttag, vasturl (URL)
+        var d = vastAsset.data;
+        bid.vastContent = d.vast2 || d.vast || d.xml || d.value || d.adm || '';
+        bid.vastUrl     = d.url   || d.vasttag || d.vasturl || d.vastUrl || '';
+        // If no inline XML but we have a URL, we'll fetch it in the player
+        // If vastContent looks like a URL rather than XML, treat it as a URL
+        if(!bid.vastContent && !bid.vastUrl){
+          // Last resort: look for any string field that looks like XML or a URL
+          Object.keys(d).forEach(function(k){
+            var v = d[k];
+            if(typeof v !== 'string' || bid.vastContent || bid.vastUrl) return;
+            if(v.trim().startsWith('<')) bid.vastContent = v;
+            else if(v.startsWith('http')) bid.vastUrl = v;
+          });
+        }
+        if(vastAsset.data.w) bid.w = vastAsset.data.w;
+        if(vastAsset.data.h) bid.h = vastAsset.data.h;
+        // Fall back to bid dimensions (320x480 for interstitial video)
+        if(!bid.w) bid.w = 320;
+        if(!bid.h) bid.h = 480;
+        log('MAX_ADM fetched — Video/VAST asset (type: '+vastAsset.type+'), data keys: ['+Object.keys(vastAsset.data).join(', ')+'], '+bid.apiv3Beacons.length+' beacon(s)','ok');
+        log('VAST content: '+(bid.vastContent?bid.vastContent.length+' chars inline':(bid.vastUrl?'URL: '+bid.vastUrl.slice(0,60)+'…':'empty — check raw MAX_ADM')),'info');
+        // Store raw for display
+        bid.adm = bid.vastContent || bid.vastUrl || JSON.stringify(vastAsset.data);
+      }
+
+      showParsedApiv3Ready(bid);
+      // Update format selector to reflect actual asset type fetched
+      var fmtSel = document.getElementById('adFormat');
+      if(fmtSel){
+        if(bid._admType === 'html'){
+          fmtSel.value = 'banner';
+        } else if(fmtSel.value === 'banner'){
+          // Was set to banner but we got video — switch to interstitial default
+          fmtSel.value = 'interstitial';
+        }
+      }
+      callback(bid);
+    })
+    .catch(function(err){
+      log('admurl fetch failed: '+err.message,'err');
+      var el=document.getElementById('parsedSummary');
+      el.innerHTML+=prow('admurl','<a href="'+esc(bid.admurl)+'" target="_blank" style="color:var(--blue-light)">open in new tab</a>','');
+      callback(null);
+    });
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+function populateBidSelector(){
+  var sel=document.getElementById('bidSelect');
+  sel.innerHTML=parsedBids.map(function(b,i){return '<option value="'+i+'">'+esc(b.label)+'</option>';}).join('');
+  document.getElementById('bidSelector').className=parsedBids.length>1?'bid-selector visible':'bid-selector';
+}
+
+function onBidSelect(){
+  activeBid=parsedBids[parseInt(document.getElementById('bidSelect').value)];
+  if(activeBid._fmt==='apiv3'){
+    if(activeBid.adm) showParsedApiv3Ready(activeBid);
+    else showParsedApiv3Pending(activeBid);
+  } else showParsedOrtb(activeBid);
+}
+
+function buildNurlButtons(bid){
+  var btns=document.getElementById('nurlBtns');
+  btns.innerHTML='';
+  var isBplus = bid._fmt === 'ortb-bplus';
+  var isDsp   = bid._fmt === 'ortb-dsp';
+
+  // ── Type 1 (DSP) & Type 2 (P+): nurl = our win notice ──────────────────────
+  if(!isBplus && bid.nurl){
+    var nb=document.createElement('button'); nb.className='btn-sm';
+    nb.textContent='🔔 Fire nurl (win notice)';
+    nb.title='Our supply-side win notice — notify Verve that this bid won';
+    (function(b){ nb.onclick=function(){
+      var url=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
+      new Image().src=url; addBeacon('win',url,true);
+    };})(bid); btns.appendChild(nb);
+  }
+
+  // ── Type 1 (DSP) & Type 2 (P+): burl = our supply billing notice (publisher fires) ─
+  if(!isBplus && bid.burl){
+    var bb=document.createElement('button'); bb.className='btn-sm';
+    bb.textContent='💳 Fire burl (supply billing notice)';
+    bb.title='Our supply billing URL — the publisher is expected to fire this when a billable impression occurs';
+    (function(b){ bb.onclick=function(){
+      var url=b.burl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price);
+      new Image().src=url; addBeacon('win',url,true);
+    };})(bid); btns.appendChild(bb);
+  }
+
+  // ── Type 3 (B+): burl = supply billing notice (publisher fires, we simulate) ─
+  if(isBplus && bid.burl){
+    var bb2=document.createElement('button'); bb2.className='btn-sm';
+    bb2.textContent='💳 Fire burl (supply billing notice)';
+    bb2.title='Our supply billing URL — the publisher is expected to fire this when a billable impression occurs';
+    (function(b){ bb2.onclick=function(){
+      var url=b.burl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price);
+      new Image().src=url; addBeacon('win',url,true);
+    };})(bid); btns.appendChild(bb2);
+  }
+
+  // ── Type 3 (B+): nurl = win notice when also present ────────────────────────
+  if(isBplus && bid.nurl){
+    var nb2=document.createElement('button'); nb2.className='btn-sm';
+    nb2.textContent='🔔 Fire nurl (win notice)';
+    nb2.title='Win notice — confirms auction win';
+    (function(b){ nb2.onclick=function(){
+      var url=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
+      new Image().src=url; addBeacon('win',url,true);
+    };})(bid); btns.appendChild(nb2);
+  }
+
+  // ── lurl — all types ─────────────────────────────────────────────────────────
+  if(bid.lurl){
+    var lb=document.createElement('button'); lb.className='btn-sm';
+    lb.textContent='🔕 Fire lurl (loss notice)';
+    lb.title='Loss notice — fire when this bid lost the auction';
+    (function(b){ lb.onclick=function(){
+      var url=b.lurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_LOSS\}/g,'0');
+      new Image().src=url; addBeacon('loss',url,true);
+    };})(bid); btns.appendChild(lb);
+  }
+}
+
+function prow(k,v,cls){
+  return '<div class="pr"><span class="pk">'+k+'</span><span class="pv'+(cls?' '+cls:'')+'">'+esc(String(v||'—'))+'</span></div>';
+}
+function hideParsed(){
+  document.getElementById('parsedSummary').className='parsed-summary';
+  document.getElementById('bidSelector').className='bid-selector';
+  document.getElementById('nurlBtns').innerHTML='';
+  parsedBids=[]; activeBid=null;
+}
+function toggleOverrides(){
+  var sec=document.getElementById('overridesSection');
+  var open=sec.classList.toggle('visible');
+  document.querySelector('.overrides-toggle').textContent=(open?'▾':'▸')+' Overrides & options';
+}
+
+// ── MRAID stub & beacon interceptor ──────────────────────────────────────────
+var MRAID_STUB=[
+  '<script>',
+  '(function(){var L={};',
+  'window.mraid={',
+  '  getVersion:function(){return"2.0";},',
+  '  getState:function(){return"default";},',
+  '  isViewable:function(){return true;},',
+  '  getPlacementType:function(){return"inline";},',
+  '  getScreenSize:function(){return{width:window.innerWidth,height:window.innerHeight};},',
+  '  getCurrentPosition:function(){return{x:0,y:0,width:window.innerWidth,height:window.innerHeight};},',
+  '  getMaxSize:function(){return{width:window.innerWidth,height:window.innerHeight};},',
+  '  getExpandProperties:function(){return{width:window.innerWidth,height:window.innerHeight,useCustomClose:false,isModal:true};},',
+  '  supports:function(){return false;},',
+  '  useCustomClose:function(){},close:function(){},expand:function(){},',
+  '  open:function(u){try{window.open(u,"_blank");}catch(e){}},',
+  '  addEventListener:function(e,cb){if(!L[e])L[e]=[];L[e].push(cb);',
+  '    if(e==="ready")setTimeout(function(){cb();},10);',
+  '    if(e==="viewableChange")setTimeout(function(){cb(true);},20);},',
+  '  removeEventListener:function(e,cb){if(L[e])L[e]=L[e].filter(function(f){return f!==cb;});},',
+  '  STATES:{LOADING:"loading",DEFAULT:"default",EXPANDED:"expanded",HIDDEN:"hidden"},VERSION:"2.0"',
+  '};})();',
+  '<\/script>'
+].join('\n');
+
+var BEACON_INTERCEPTOR=[
+  '<script>',
+  '(function(){',
+  '  function r(u){try{window.parent.postMessage({type:"beacon",url:String(u)},"*");}catch(e){}}',
+  '  var _f=window.fetch;',
+  '  window.fetch=function(i,o){var u=typeof i==="string"?i:(i&&i.url)||String(i);r(u);return _f?_f.apply(this,arguments):Promise.resolve(new Response("",{status:200}));};',
+  '  var _o=XMLHttpRequest.prototype.open;',
+  '  XMLHttpRequest.prototype.open=function(m,u){r(u);return _o.apply(this,arguments);};',
+  '  var _d=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");',
+  '  if(_d&&_d.set){Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:true,get:_d.get,',
+  '    set:function(v){if(v&&typeof v==="string"&&(v.startsWith("http")||v.startsWith("//")))r(v);_d.set.call(this,v);}});}',
+  '  if(navigator.sendBeacon){var _sb=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){r(u);return _sb(u,d);};}',
+  '})();',
+  '<\/script>'
+].join('\n');
+
+// ── Core render ───────────────────────────────────────────────────────────────
+function renderAd(){
+  if(!activeBid){log('No bid — paste a valid response first','warn');return;}
+  var bid=activeBid;
+
+  // For apiv3: need to fetch admurl first if not done yet
+  if(bid._fmt==='apiv3' && !bid.adm){
+    var btn=document.querySelector('.btn-primary');
+    if(btn){ btn.textContent='⏳ Fetching MAX_ADM…'; btn.disabled=true; }
+    fetchAdmurl(bid, function(filled){
+      if(btn){ btn.textContent='▶ Render Ad'; btn.disabled=false; }
+      if(filled) doRender(filled);
+    });
+    return;
+  }
+
+  doRender(bid);
+}
+
+function doRender(bid){
+  // Clear beacons from any previous render
+  clearBeacons();
+  clearLog();
+  var w=parseInt(document.getElementById('overrideW').value)||bid.w||300;
+  var h=parseInt(document.getElementById('overrideH').value)||bid.h||50;
+
+  log('Rendering '+w+'×'+h+(bid.price?' @ '+bid.price+' '+bid.cur:'')+' crid:'+bid.crid,'info');
+
+  // ── VAST detection for Types 1 & 2 ──────────────────────────────────────────
+  // adm can be: inline VAST XML (starts with <VAST), a VAST URL, or HTML
+  if(bid._fmt !== 'apiv3' && bid.adm && bid._admType !== 'vast'){
+    var trimmed = bid.adm.trim();
+    var isVastXml = /^<VAST[\s>]/i.test(trimmed);
+    var isVastUrl = !isVastXml && /^https?:\/\//i.test(trimmed) && !/^</.test(trimmed);
+    if(isVastXml || isVastUrl){
+      bid._admType   = 'vast';
+      bid.vastContent = isVastXml ? trimmed : '';
+      bid.vastUrl     = isVastUrl ? trimmed : '';
+      // Default vastCfg for Types 1 & 2 — no remoteconfigs available
+      if(!bid.vastCfg){
+        bid.vastCfg = {
+          audiostate:           'muted',
+          skipOffset:           5,
+          rewardedSkipOffset:   30,
+          endcardEnabled:       true,
+          endcardCloseDelay:    3,
+          hideControls:         false,
+          fullscreenClick:      true,
+          customEndcardEnabled: false,
+          closeAfterFinished:   false,
+          adExperience:         'performance',
+          iconSize:             20
+        };
+      }
+      bid.customEndcardHtml = '';
+      log('VAST detected in adm ('+(isVastXml?'inline XML':'URL')+') — routing to VAST player','info');
+      doRenderVast(bid, w, h);
+      return;
+    }
+  }
+
+  // ── VAST video path (Type 3) ─────────────────────────────────────────────────
+  if(bid._admType === 'vast'){
+    doRenderVast(bid, w, h);
+    return;
+  }
+
+  // ── HTML banner path ─────────────────────────────────────────────────────────
+  var adm=bid.adm
+    .replace(/\$\{AUCTION_PRICE\}/g, bid.price||0)
+    .replace(/\$\{AUCTION_MIN_TO_WIN\}/g, bid.price||0)
+    .replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g, bid.price||0)
+    .replace(/%%WINNING_PRICE%%/g, bid.price||0);
+
+  adm=adm.replace(/<script[^>]*\bsrc\s*=\s*["']?mraid\.js["']?[^>]*>\s*<\/script>/gi,'');
+
+  var doc=[
+    '<!DOCTYPE html><html><head><meta charset="utf-8">',
+    '<style>*{margin:0;padding:0;}html,body{width:'+w+'px;height:'+h+'px;overflow:hidden;background:transparent;}</style>',
+    BEACON_INTERCEPTOR,
+    MRAID_STUB,
+    '</head><body>',
+    adm,
+    '</body></html>'
+  ].join('\n');
+
+  var newFrame = replaceAdFrame(w, h);
+  newFrame.srcdoc=doc;
+
+  // ── P+/B+ click beacon safety net ───────────────────────────────────────────
+  // The Verve wrapper adds its CB[] click listener to ctr.contentWindow BEFORE
+  // setting srcdoc on it — so the listener attaches to the OLD contentWindow and
+  // is lost when the iframe navigates. External DSP creatives (e.g. Smadex) that
+  // use window.open() also bypass event propagation entirely.
+  // Fix: add a capture-phase listener on the outer srcdoc frame's document. Since
+  // the outer frame is same-origin (srcdoc), we can read its CB[] variable and
+  // fire the beacons ourselves when a click is detected.
+  if(bid._fmt === 'ortb-verve' || bid._fmt === 'ortb-bplus'){
+    newFrame.addEventListener('load', function onOuterLoad(){
+      newFrame.removeEventListener('load', onOuterLoad);
+      try{
+        var fw = newFrame.contentWindow;
+        var fdoc = newFrame.contentDocument;
+        if(!fw || !fdoc) return;
+        var clickFired = false;
+        fdoc.addEventListener('click', function(){
+          if(clickFired) return;
+          clickFired = true;
+          // CB is defined in the wrapper JS running in this same-origin frame
+          try{
+            var CB = fw.CB;
+            if(CB && CB.length){
+              for(var i=0; i<CB.length; i++){
+                var url = CB[i];
+                new fw.Image().src = url;
+                // Also report to the beacon panel
+                window.postMessage({type:'beacon', url:url, eventName:'click'},'*');
+              }
+              log('Click beacon safety net fired '+CB.length+' CB[] beacon(s)','net');
+            }
+          }catch(ex){ log('Click safety net error: '+ex.message,'warn'); }
+        }, true); // capture phase — fires before any inner handler
+        log('Click capture listener ready (P+/B+ CB[] safety net)','info');
+      }catch(ex){}
+    });
+  }
+
+  if(bid._fmt==='apiv3'){
+    newFrame.addEventListener('load', function(){ apiv3PostRender(bid, newFrame); });
+  }
+
+  log('Wrote adm to iframe via srcdoc ('+adm.length+' chars)','ok');
+  showPreview(w, h, bid);
+}
+
+// ── VAST renderer ─────────────────────────────────────────────────────────────
+function doRenderVast(bid, w, h){
+  var vastXml  = bid.vastContent || '';
+  var vastUrl  = bid.vastUrl     || '';
+  var vastMode = vastXml ? 'inline XML' : (vastUrl ? 'VAST URL' : '');
+
+  if(!vastXml && !vastUrl){
+    log('No VAST content or URL found in MAX_ADM asset — cannot render video','err');
+    return;
+  }
+
+  // Resolve config — use parsed remoteconfigs if available, else sensible defaults
+  var cfg = bid.vastCfg || {};
+  var isRewarded   = document.getElementById('adFormat') && document.getElementById('adFormat').value === 'rewarded';
+  var audioOn      = cfg.audiostate === 'on';
+  var skipOffset   = isRewarded ? (cfg.rewardedSkipOffset || 30) : (cfg.skipOffset || 5);
+  var endcardOn    = cfg.endcardEnabled !== false;
+  var endcardDelay = cfg.endcardCloseDelay != null ? cfg.endcardCloseDelay : 3;
+  var hideControls = cfg.hideControls === true;
+  var fscClick     = cfg.fullscreenClick !== false;
+  var customEndOn  = cfg.customEndcardEnabled && bid.customEndcardHtml;
+  var closeAfter   = cfg.closeAfterFinished === true;
+  var iconSize     = cfg.iconSize || 20;
+
+  log('VAST config — format:'+(isRewarded?'rewarded':'interstitial')+
+      ' audio:'+(audioOn?'on':'muted')+
+      ' skipAt:'+skipOffset+'s'+
+      ' endcard:'+(endcardOn?'yes (close delay '+endcardDelay+'s)':'no')+
+      ' customEndcard:'+(customEndOn?'yes':'no')+
+      ' hideControls:'+(hideControls?'yes':'no'), 'info');
+
+  log('Building VAST player ('+vastMode+')','info');
+
+  // Pass the vastSrc into the player page via a global variable to avoid
+  // encoding issues with inline data URIs in srcdoc
+  var playerDoc = [
+    '<!DOCTYPE html><html><head><meta charset="utf-8">',
+    '<style>',
+    '*{margin:0;padding:0;box-sizing:border-box;}',
+    'html,body{width:'+w+'px;height:'+h+'px;overflow:hidden;background:#000;font-family:sans-serif;}',
+    '#video-wrap{position:relative;width:'+w+'px;height:'+h+'px;}',
+    'video{width:100%;height:100%;display:block;object-fit:contain;background:#000;}',
+    /* Click overlay sits above video but below controls */
+    '#click-overlay{position:absolute;top:0;left:0;width:100%;height:calc(100% - 44px);cursor:pointer;z-index:5;}',
+    /* Progress bar */
+    '#progress{position:absolute;bottom:44px;left:0;width:100%;height:3px;background:rgba(255,255,255,0.3);z-index:10;}',
+    '#progress-fill{height:100%;width:0%;background:#fff;transition:width 0.25s linear;}',
+    /* Controls bar */
+    '#controls{position:absolute;bottom:0;left:0;width:100%;height:44px;background:rgba(0,0,0,0.6);display:flex;align-items:center;padding:0 10px;gap:10px;z-index:10;}',
+    '#btn-play{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;width:28px;text-align:center;}',
+    '#btn-mute{background:none;border:none;color:#fff;font-size:14px;cursor:pointer;width:28px;text-align:center;}',
+    '#time-display{color:#fff;font-size:11px;margin-left:auto;}',
+    '#skip-btn{display:none;position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.6);color:#fff;border:none;padding:0;font-size:'+(iconSize-4)+'px;font-weight:700;cursor:pointer;z-index:20;border-radius:4px;width:'+iconSize+'px;height:'+iconSize+'px;align-items:center;justify-content:center;line-height:1;}',
+    /* Companion / endcard overlay */
+    '#companion{display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:30;background:#000;cursor:pointer;}',
+    '#companion img{width:100%;height:100%;object-fit:contain;}',
+    '#companion-close{position:absolute;top:10px;left:10px;color:#fff;font-size:'+(iconSize-4)+'px;font-weight:700;cursor:pointer;z-index:31;background:rgba(0,0,0,0.6);border-radius:4px;width:'+iconSize+'px;height:'+iconSize+'px;display:flex;align-items:center;justify-content:center;line-height:1;}',
+    '#custom-endcard{display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:35;background:#000;overflow:hidden;}',
+    '#msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:13px;text-align:center;pointer-events:none;padding:10px;z-index:40;}',
+    '</style>',
+    BEACON_INTERCEPTOR,
+    '</head><body>',
+    '<div id="video-wrap">',
+    '  <video id="v" playsinline webkit-playsinline></video>',
+    '  <div id="progress"><div id="progress-fill"></div></div>',
+    '  <div id="click-overlay"></div>',
+    '  <div id="controls">',
+    '    <button id="btn-play">▶</button>',
+    '    <button id="btn-mute">🔇</button>',
+    '    <span id="time-display">0:00 / 0:00</span>',
+    '  </div>',
+    '  <button id="skip-btn">▶</button>',
+    '  <div id="companion"><span id="companion-close">✕</span><img id="companion-img" src=""/></div>',
+    '  <div id="custom-endcard"></div>',
+    '  <div id="msg">Loading…</div>',
+    '</div>',
+
+    '<script>',
+    '(function(){',
+    '  var VAST_XML='+JSON.stringify(vastXml)+';',
+    '  var VAST_URL='+JSON.stringify(vastUrl)+';',
+    '  var CFG={',
+    '    audioOn:'+JSON.stringify(audioOn)+',',
+    '    skipOffset:'+JSON.stringify(skipOffset)+',',
+    '    endcardOn:'+JSON.stringify(endcardOn)+',',
+    '    endcardDelay:'+JSON.stringify(endcardDelay)+',',
+    '    hideControls:'+JSON.stringify(hideControls)+',',
+    '    fscClick:'+JSON.stringify(fscClick)+',',
+    '    customEndOn:'+JSON.stringify(!!customEndOn)+',',
+    '    customEndHtml:'+JSON.stringify(customEndOn ? bid.customEndcardHtml : '')+',',
+    '    closeAfter:'+JSON.stringify(closeAfter)+',',
+    '    iconSize:'+JSON.stringify(iconSize),
+    '  };',
+    '  var skipShown=false;',
+    '  var video=document.getElementById("v");',
+    '  var msg=document.getElementById("msg");',
+    '  var progressFill=document.getElementById("progress-fill");',
+    '  var timeDisplay=document.getElementById("time-display");',
+    '  var skipBtn=document.getElementById("skip-btn");',
+    '  var clickOverlay=document.getElementById("click-overlay");',
+    '  var btnPlay=document.getElementById("btn-play");',
+    '  var btnMute=document.getElementById("btn-mute");',
+    '  var controls=document.getElementById("controls");',
+    '  var companion=document.getElementById("companion");',
+    '  var companionImg=document.getElementById("companion-img");',
+    '  var companionClose=document.getElementById("companion-close");',
+    '  var customEndcard=document.getElementById("custom-endcard");',
+    '  var fired={};',
+    '',
+    '  // Apply remoteconfigs',
+    '  if(CFG.hideControls) controls.style.display="none";',
+    '  if(CFG.customEndOn && CFG.customEndHtml) customEndcard.innerHTML=CFG.customEndHtml;',
+    '  // Adjust click overlay height: full height if controls hidden',
+    '  if(CFG.hideControls) clickOverlay.style.height="100%";',
+    '',
+    '  function fmt(s){var m=Math.floor(s/60),sec=Math.floor(s%60);return m+":"+(sec<10?"0":"")+sec;}',
+    '  function ping(url){if(!url)return;try{new Image().src=url;}catch(e){}}',
+    '  function report(eventName,url){',
+    '    try{window.parent.postMessage({type:"beacon",url:url||eventName,eventName:eventName},"*");}catch(e){}',
+    '    if(url) ping(url);',
+    '  }',
+    '  function macro(url,playhead){',
+    '    if(!url) return url;',
+    '    var ph=playhead!=null?fmt(playhead):"00:00:00.000";',
+    '    return url.replace(/\\[CONTENTPLAYHEAD\\]/g,encodeURIComponent(ph))',
+    '               .replace(/\\[ERRORCODE\\]/g,"900")',
+    '               .replace(/\\[CACHEBUSTING\\]/g,Math.round(Math.random()*1e9));',
+    '  }',
+    '',
+    '  // Endcard sequence: companion → (after endcard_close_delay) show close btn → custom endcard',
+    '  function showEndcardSequence(v){',
+    '    if(!CFG.endcardOn) return;',
+    '    if(!v.companionImg && !(CFG.customEndOn && CFG.customEndHtml)) return;',
+    '    if(v.companionImg){',
+    '      companionImg.src=v.companionImg;',
+    '      companion.style.display="block";',
+    '      companionClose.style.display="none";',
+    '      fireTrack("creativeView",v);',
+    '      // Close button visible after endcard_close_delay',
+    '      setTimeout(function(){companionClose.style.display="flex";},CFG.endcardDelay*1000);',
+    '    }',
+    '    // Custom endcard shows after companion + close delay',
+    '    if(CFG.customEndOn && CFG.customEndHtml){',
+    '      var delay = v.companionImg ? (CFG.endcardDelay+1)*1000 : 0;',
+    '      setTimeout(function(){',
+    '        companion.style.display="none";',
+    '        customEndcard.style.display="block";',
+    '      }, delay);',
+    '    }',
+    '  }',
+    '',
+    '  function parseVast(xml){',
+    '    var doc=(new DOMParser()).parseFromString(xml,"text/xml");',
+    '    var result={mediaUrl:"",wrapperUrl:"",impUrls:[],errorUrl:"",clickUrl:"",clickTrackUrls:[],trackMap:{},companionImg:"",companionClick:"",companionTrackUrls:[]};',
+    '    var bestBitrate=0;',
+    '    doc.querySelectorAll("MediaFile").forEach(function(mf){',
+    '      var t=(mf.getAttribute("type")||"").toLowerCase();',
+    '      var br=parseInt(mf.getAttribute("bitrate")||"0");',
+    '      if((t.includes("mp4")||t.includes("webm"))&&br>=bestBitrate){bestBitrate=br;result.mediaUrl=(mf.textContent||"").trim();}',
+    '    });',
+    '    // Wrapper URI — follow this if no MediaFile found',
+    '    var wuri=doc.querySelector("VASTAdTagURI"); if(wuri) result.wrapperUrl=(wuri.textContent||"").trim();',
+    '    doc.querySelectorAll("InLine > Impression, Wrapper > Impression").forEach(function(n){',
+    '      var u=(n.textContent||"").trim(); if(u) result.impUrls.push(u);',
+    '    });',
+    '    var err=doc.querySelector("Error"); if(err) result.errorUrl=(err.textContent||"").trim();',
+    '    var ct=doc.querySelector("ClickThrough"); if(ct) result.clickUrl=(ct.textContent||"").trim();',
+    '    doc.querySelectorAll("VideoClicks ClickTracking").forEach(function(n){',
+    '      var u=(n.textContent||"").trim(); if(u) result.clickTrackUrls.push(u);',
+    '    });',
+    '    doc.querySelectorAll("Linear TrackingEvents Tracking").forEach(function(n){',
+    '      var ev=n.getAttribute("event"); var u=(n.textContent||"").trim();',
+    '      if(ev&&u){if(!result.trackMap[ev])result.trackMap[ev]=[];result.trackMap[ev].push(u);}',
+    '    });',
+    '    var comp=doc.querySelector("Companion");',
+    '    if(comp){',
+    '      // StaticResource — direct image URL',
+    '      var sr=comp.querySelector("StaticResource"); if(sr) result.companionImg=(sr.textContent||"").trim();',
+    '      // HTMLResource — extract first <img src> from the HTML string',
+    '      if(!result.companionImg){',
+    '        var hr=comp.querySelector("HTMLResource");',
+    '        if(hr){',
+    '          var htmlStr=hr.textContent||"";',
+    '          var imgMatch=htmlStr.match(/<img[^>]+src=["\x27]([^"\']+)["\x27][^>]*>/i);',
+    '          if(imgMatch) result.companionImg=imgMatch[1];',
+    '          var hrefMatch=htmlStr.match(/<a[^>]+href=["\x27]([^"\']+)["\x27][^>]*>/i);',
+    '          if(hrefMatch) result.companionHtmlClick=hrefMatch[1];',
+    '          var onclickMatch=htmlStr.match(/i\\.src\\s*=\\s*[\'"]([^\'"]+)[\'"]/);',
+    '          if(onclickMatch) result.companionTrackUrls.push(onclickMatch[1]);',
+    '        }',
+    '      }',
+    '      var cct=comp.querySelector("CompanionClickThrough"); if(cct) result.companionClick=(cct.textContent||"").trim();',
+    '      // For HTMLResource companions the click URL may be in the href, not CompanionClickThrough',
+    '      if(!result.companionClick && result.companionHtmlClick) result.companionClick=result.companionHtmlClick;',
+    '      comp.querySelectorAll("CompanionClickTracking").forEach(function(n){var u=(n.textContent||"").trim();if(u)result.companionTrackUrls.push(u);});',
+    '    }',
+    '    return result;',
+    '  }',
+    '',
+    '  // Merge wrapper result into accumulated result (wrapper trackers carry through)',
+    '  function mergeVast(acc, inner){',
+    '    // Inner InLine wins for mediaUrl, companionImg, clickUrl',
+    '    if(inner.mediaUrl)     acc.mediaUrl     = inner.mediaUrl;',
+    '    if(inner.companionImg) acc.companionImg  = inner.companionImg;',
+    '    if(inner.companionClick) acc.companionClick = inner.companionClick;',
+    '    if(!acc.clickUrl && inner.clickUrl) acc.clickUrl = inner.clickUrl;',
+    '    acc.wrapperUrl = inner.wrapperUrl;',
+    '    // Merge impression and click trackers from all levels',
+    '    inner.impUrls.forEach(function(u){acc.impUrls.push(u);});',
+    '    inner.clickTrackUrls.forEach(function(u){acc.clickTrackUrls.push(u);});',
+    '    inner.companionTrackUrls.forEach(function(u){acc.companionTrackUrls.push(u);});',
+    '    // Merge tracking events',
+    '    Object.keys(inner.trackMap).forEach(function(ev){',
+    '      if(!acc.trackMap[ev]) acc.trackMap[ev]=[];',
+    '      inner.trackMap[ev].forEach(function(u){acc.trackMap[ev].push(u);});',
+    '    });',
+    '    return acc;',
+    '  }',
+    '',
+    '  function fireTrack(ev,v){',
+    '    (v.trackMap[ev]||[]).forEach(function(u){report(ev,macro(u,video.currentTime));});',
+    '  }',
+    '',
+    '  // Resolve VAST wrapper chain then call loadAndPlay',
+    '  function resolveAndPlay(xml, depth){',
+    '    if(depth===undefined) depth=0;',
+    '    var v=parseVast(xml);',
+    '    if(v.mediaUrl){',
+    '      loadAndPlay(v);',
+    '    } else if(v.wrapperUrl && depth<5){',
+    '      msg.textContent="Resolving VAST wrapper (hop "+(depth+1)+")…";',
+    '      report("wrapperFetch", v.wrapperUrl);',
+    '      fetch(v.wrapperUrl)',
+    '        .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status+" from wrapper");return r.text();})',
+    '        .then(function(innerXml){',
+    '          var inner=parseVast(innerXml);',
+    '          var merged=mergeVast(v, inner);',
+    '          if(merged.mediaUrl){',
+    '            loadAndPlay(merged);',
+    '          } else if(merged.wrapperUrl && depth<4){',
+    '            // Another wrapper level — recurse with merged accumulator',
+    '            resolveAndPlay(innerXml, depth+1);',
+    '          } else {',
+    '            msg.textContent="VAST wrapper chain resolved but no MediaFile found after "+(depth+1)+" hops.";',
+    '            console.log("Final VAST XML:",innerXml);',
+    '          }',
+    '        })',
+    '        .catch(function(e){msg.textContent="VAST wrapper fetch failed: "+e.message;});',
+    '    } else if(depth>=5){',
+    '      msg.textContent="VAST wrapper chain exceeded 5 hops — stopping.";',
+    '    } else {',
+    '      msg.textContent="VAST parsed — no MediaFile and no wrapper URI found.";',
+    '      console.log("VAST XML:",xml);',
+    '    }',
+    '  }',
+    '',
+    '  function loadAndPlay(v){',
+    '    msg.textContent="";',
+    '    video.src=v.mediaUrl;',
+    '',
+    '    video.addEventListener("play",function onPlay(){',
+    '      video.removeEventListener("play",onPlay);',
+    '      if(!fired.imp){fired.imp=true; v.impUrls.forEach(function(u){report("impression",macro(u,0));});}',
+    '      fireTrack("creativeView",v);',
+    '      if(!CFG.hideControls) btnPlay.textContent="⏸";',
+    '    });',
+    '    video.addEventListener("pause",function(){',
+    '      if(!CFG.hideControls) btnPlay.textContent="▶";',
+    '      if(fired.start&&!fired.pause){fired.pause=true;fireTrack("pause",v);}',
+    '    });',
+    '    video.addEventListener("ended",function(){',
+    '      if(!CFG.hideControls) btnPlay.textContent="▶";',
+    '      if(!fired.complete){fired.complete=true;fireTrack("complete",v);}',
+    '      showEndcardSequence(v);',
+    '    });',
+    '    video.addEventListener("volumechange",function(){',
+    '      var muted=video.muted||video.volume===0;',
+    '      if(!CFG.hideControls) btnMute.textContent=muted?"🔇":"🔊";',
+    '      if(muted&&!fired.mute){fired.mute=true;fireTrack("mute",v);}',
+    '      if(!muted&&fired.mute&&!fired.unmute){fired.unmute=true;fireTrack("unmute",v);}',
+    '    });',
+    '    video.addEventListener("timeupdate",function(){',
+    '      if(!video.duration) return;',
+    '      var pct=video.currentTime/video.duration;',
+    '      if(!CFG.hideControls){',
+    '        progressFill.style.width=(pct*100)+"%";',
+    '        timeDisplay.textContent=fmt(video.currentTime)+" / "+fmt(video.duration);',
+    '      }',
+    '      if(!skipShown && video.currentTime>=CFG.skipOffset){skipShown=true;skipBtn.style.display="flex";}',
+    '      if(!fired.start&&video.currentTime>0){fired.start=true;fireTrack("start",v);}',
+    '      if(!fired.fq&&pct>=0.25){fired.fq=true;fireTrack("firstQuartile",v);}',
+    '      if(!fired.mid&&pct>=0.5){fired.mid=true;fireTrack("midpoint",v);}',
+    '      if(!fired.tq&&pct>=0.75){fired.tq=true;fireTrack("thirdQuartile",v);}',
+    '    });',
+    '    // Play/pause — only if controls shown',
+    '    if(!CFG.hideControls){',
+    '      btnPlay.onclick=function(){video.paused?video.play():video.pause();};',
+    '      btnMute.onclick=function(){video.muted=!video.muted;};',
+    '    }',
+    '    // Click overlay — only if fullscreen_clickability enabled',
+    '    if(CFG.fscClick){',
+    '      clickOverlay.onclick=function(){',
+    '        if(!fired.click){fired.click=true;',
+    '          v.clickTrackUrls.forEach(function(u){report("click",macro(u,video.currentTime));});',
+    '          if(v.clickUrl){try{window.open(v.clickUrl,"_blank");}catch(e){}}',
+    '        }',
+    '      };',
+    '    }',
+    '    // Skip button',
+    '    skipBtn.onclick=function(){',
+    '      fireTrack("skip",v);',
+    '      video.currentTime=video.duration||999; video.pause();',
+    '      skipBtn.style.display="none";',
+    '      showEndcardSequence(v);',
+    '    };',
+    '    // Companion close button',
+    '    companionClose.onclick=function(e){e.stopPropagation();companion.style.display="none";};',
+    '    companion.onclick=function(){',
+    '      v.companionTrackUrls.forEach(function(u){report("companionClick",macro(u,0));});',
+    '      if(v.companionClick){try{window.open(v.companionClick,"_blank");}catch(e){}}',
+    '    };',
+    '    // Audio: audiostate "on" → try unmuted, fall back to muted if blocked',
+    '    if(CFG.audioOn){',
+    '      video.muted=false;',
+    '      if(!CFG.hideControls) btnMute.textContent="🔊";',
+    '      video.play().catch(function(){',
+    '        // Browser blocked unmuted autoplay — fall back to muted',
+    '        video.muted=true;',
+    '        if(!CFG.hideControls) btnMute.textContent="🔇";',
+    '        video.play().catch(function(){msg.textContent="Tap to play";});',
+    '      });',
+    '    } else {',
+    '      video.muted=true;',
+    '      if(!CFG.hideControls) btnMute.textContent="🔇";',
+    '      video.play().catch(function(){msg.textContent="Tap to play";});',
+    '    }',
+    '  }',
+    '',
+    '  // Load VAST — use inline XML directly if available, otherwise fetch URL',
+    '  if(VAST_XML){',
+    '    try{resolveAndPlay(VAST_XML,0);}catch(e){msg.textContent="VAST parse error: "+e.message;}',
+    '  } else if(VAST_URL){',
+    '    msg.textContent="Fetching VAST…";',
+    '    fetch(VAST_URL)',
+    '      .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.text();})',
+    '      .then(function(xml){resolveAndPlay(xml,0);})',
+    '      .catch(function(e){msg.textContent="VAST fetch failed: "+e.message;});',
+    '  } else {',
+    '    msg.textContent="No VAST content available.";',
+    '  }',
+    '})();',
+    '<\/script>',
+    '</body></html>'
+  ].join('\n');
+
+  var newFrame = replaceAdFrame(w, h);
+  newFrame.srcdoc = playerDoc;
+
+  // Viewability-gated imptrackers still apply for video
+  newFrame.addEventListener('load', function(){ apiv3PostRender(bid, newFrame); });
+
+  log('VAST player rendered ('+vastMode+') — autoplay muted, quartile tracking active','ok');
+  showPreview(w, h, bid);
+}
+
+// ── Shared iframe/preview helpers ─────────────────────────────────────────────
+function replaceAdFrame(w, h){
+  var oldFrame=document.getElementById('ad-frame');
+  var newFrame=document.createElement('iframe');
+  newFrame.id='ad-frame'; newFrame.scrolling='no'; newFrame.frameBorder='0';
+  newFrame.width=w; newFrame.height=h;
+  newFrame.style.cssText='width:'+w+'px;height:'+h+'px;border:1px dashed #2a3a50;border-radius:4px;display:block;';
+  oldFrame.parentNode.replaceChild(newFrame,oldFrame);
+  return newFrame;
+}
+
+function showPreview(w, h, bid){
+  document.getElementById('previewPlaceholder').style.display='none';
+  document.getElementById('adFrameWrapper').classList.add('visible');
+  document.getElementById('adDimLabel').textContent=w+' × '+h+' px'+(bid.crid?' | crid: '+bid.crid:'')+(bid._admType==='vast'?' | 🎬 VAST video':'');
+  document.getElementById('statusDot').classList.add('active');
+  document.getElementById('statusText').textContent='Rendered — '+w+'×'+h+(bid.price?' @ $'+bid.price+' '+bid.cur:'')+(bid._admType==='vast'?' (video)':'');
+}
+
+// ── Examples ──────────────────────────────────────────────────────────────────
+var EXAMPLES = {
+  'ortb-dsp': '{"id":"5004510c000000009ea9e5a4c924ac7b","seatbid":[{"bid":[{"id":"5b590ef721c33c4b56b9b98332ca07cf","impid":"3e05510c-0000-0000-9ea9-e5a4c924ac7b","price":0.38422,"nurl":"https://sh2b-ue101.imptracking.com/?c=e&m=nurl&auctionId=c5ad8a550fe4652ebfa29c28a4cb804e&price=${AUCTION_PRICE}","burl":"https://sh2b-ue101.imptracking.com/?c=e&m=b&key=c5ad8a550fe4652ebfa29c28a4cb804e&cp=${AUCTION_PRICE}","adm":"<span id=\\"adtest\\"><img src=\\"https://example.com/imp?id=123\\" width=\\"1\\" height=\\"1\\" style=\\"position:absolute;opacity:0\\"/><a href=\\"https://example.com/click?id=123\\" target=\\"_blank\\"><img src=\\"https://via.placeholder.com/320x50/1a3a6a/ffffff?text=DSP+Banner+320x50\\" width=\\"320\\" height=\\"50\\" border=\\"0\\"/></a></span>","adomain":["example.com"],"crid":"test-dsp-crid","w":320,"h":50}],"seat":"test"}],"cur":"USD"}',
+  'ortb-verve': '{"id":"34CB5D0C-13AC-4C6D-B5D5-152C5176C015","seatbid":[{"bid":[{"id":"3baab70a-0000-0000-ae89-2b9699b86a98","impid":"3EB0545D-3CA3-4D5D-A81A-D4CD22A36F15","price":0.129,"nurl":"https://got.prod-gcp-eu-west4-1.pubnative.net/v2/winnotice?ap=${AUCTION_PRICE}&amtw=${AUCTION_MIN_TO_WIN}&t=H4YijYjfgUNz802jvgA","lurl":"https://got.prod-gcp-eu-west4-1.pubnative.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YijYjfgUNz802jvgA&al=${AUCTION_LOSS}","adm":"<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:black;}</style><a href=\\"https://example.com/click\\" target=\\"_blank\\"><img src=\\"https://via.placeholder.com/320x50/040532/5cb3ff?text=Verve+oRTB+320x50\\" width=\\"320\\" height=\\"50\\" border=\\"0\\"/></a>","adomain":["alltrails.com"],"crid":"6820728","w":320,"h":50}]}],"bidid":"7ed62795","cur":"USD"}',
+  'ortb-bplus': '{"id":"3f50db9d-6366-4c08-9c63-0747254f3a5f","seatbid":[{"bid":[{"id":"3b9ea41e-0000-0000-94e4-454e1ab6a237","impid":"809eb91c-9da6-4968-9ece-46b41442d9c8","price":0.17,"lurl":"https://got-prod-gcp-ap-southeast1-2.track.smaato.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YikxmPbWYN7hMUHetMA4OkkyU-Bd9jgoGF&al=${AUCTION_LOSS}","adm":"<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#1a1a2a;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style><div style=\\"text-align:center;color:#fff;padding:20px\\"><div style=\\"font-size:18px;font-weight:700;margin-bottom:8px\\">B+ (Smaato)</div><div style=\\"font-size:12px;color:#9ab0c8\\">oRTB B+ Ad Response — 300x250</div></div>","adomain":["monsterlegendsgame.com"],"burl":"https://got-prod-gcp-ap-southeast1-2.track.smaato.net/v2/impression?aid=3107869&t=H4YikxmPbWYN7hMUHetMA4OkkyU-Bd9jgoGF&px=1&ap=${AUCTION_PRICE}","crid":"394622","w":300,"h":250}]}],"bidid":"6a7b6fb3","cur":"USD"}',
+  'apiv3': '{"id":"b0ac11a6-9033-428a-a9a9-b1f1c45c9521","seatbid":[{"bid":[{"id":"6caa6307-0000-0000-9f2b-265ebb517c99","impid":"1","price":0.082,"adid":"7a462d671329","nurl":"https://got.iad3rs0zonea.pubnative.net/v2/winnotice?ap=${AUCTION_PRICE}&amtw=${AUCTION_MINIMUM_BID_TO_WIN}&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA","lurl":"https://got.iad3rs0zonea.pubnative.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA&al=${AUCTION_LOSS}","adomain":["familydollar.com"],"crid":"137122|1dc7b9459908457bb81e1b22ad28fc0c|30459","w":320,"h":50,"ext":{"crtype":"MRAID 2.0","imptrackers":["https://got.iad3rs0zonea.pubnative.net/v2/impression?aid=2014003&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA&px=1&ap=${AUCTION_PRICE}"],"signaldata":"{\\\"status\\\":\\\"ok\\\",\\\"tagid\\\":\\\"2014003-1-1\\\",\\\"admurl\\\":\\\"https://api.iad3rs0zonea.pubnative.net/api/max/cache?t=H4YijjXfgIskkw4ECi4DNDwDtHS-AaNcS5AiwEWR\\\\u0026x=1007949\\\",\\\"format\\\":\\\"Banner\\\"}"}]}]}],"bidid":"54e508d3","cur":"USD"}'
+};
+
+function loadExample(){
+  if(!currentType){log('Select a type first','warn');return;}
+  document.getElementById('bidResponseJson').value=EXAMPLES[currentType];
+  onJsonInput();
+}
+
+function clearAll(){
+  document.getElementById('bidResponseJson').value='';
+  document.getElementById('bidResponseJson').className='';
+  hideParsed();
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>
