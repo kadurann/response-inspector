@@ -10,7 +10,7 @@ WHAT IT DOES
 Paste any Verve ad response JSON, click Render Ad, and the tool will:
 
 
-Render the creative in a sandboxed iframe (banner, MRAID, native-in-banner, or VAST video)
+Render the creative in a sandboxed iframe (banner, MRAID, native-in-banner, native, or VAST video)
 Fire and log all impression, click, and VAST tracking beacons in real time
 Show a structured summary of every bid field that matters for debugging
 Let you manually fire nurl, lurl, and burl notices
