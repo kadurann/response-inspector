@@ -231,13 +231,13 @@
         <div class="type-card" id="tc-ortb-verve" onclick="selectType('ortb-verve')">
           <div class="tc-label" style="color:#4cca84">Type 2</div>
           <div class="tc-name">oRTB P+ Ad Response</div>
-          <div class="tc-desc">After P+ (PubNative) ad server. Verve wrapper script in <code>adm</code>, with <code>nurl</code> / <code>lurl</code>.</div>
+          <div class="tc-desc">After P+ (PubNative) ad server. Verve wrapper script in <code>adm</code>.</div>
         </div>
 
         <div class="type-card" id="tc-ortb-bplus" onclick="selectType('ortb-bplus')">
           <div class="tc-label" style="color:#e8a840">Type 3</div>
           <div class="tc-name">oRTB B+ Ad Response</div>
-          <div class="tc-desc">After B+ (Smaato) ad server. Verve wrapper script in <code>adm</code>, with <code>burl</code> / <code>lurl</code>.</div>
+          <div class="tc-desc">After B+ ad server. Verve wrapper script in <code>adm</code>.</div>
         </div>
 
         <div class="type-card" id="tc-apiv3" onclick="selectType('apiv3')">
@@ -421,7 +421,7 @@ var TYPE_INFO = {
       '<strong>Format:</strong> Standard OpenRTB 2.x — <code>seatbid[].bid[].adm</code> contains raw DSP HTML/JS creative.',
       '<strong>Macros:</strong> <code>${AUCTION_PRICE}</code>, <code>${AUCTION_MIN_TO_WIN}</code> are resolved with the bid price before rendering.',
       '<strong>Beacons:</strong> Impression and click trackers are embedded inside the adm — they fire from within the rendered creative. Use DevTools Network for nested iframes.',
-      '<strong>nurl/lurl:</strong> Win and loss notice URLs in the bid object — use the manual fire buttons after parsing.',
+      '<strong>nurl:</strong> Win notice — auto-fired immediately on parse, simulating the exchange confirming the auction win before the ad renders.',
       '<strong>burl:</strong> If present, this is our supply-side billing URL — the publisher is expected to fire it when a billable impression occurs.'
     ]
   },
@@ -431,7 +431,7 @@ var TYPE_INFO = {
     info: [
       '<strong>Format:</strong> Standard OpenRTB 2.x from the P+ (PubNative) ad server. The <code>adm</code> is Verve\'s wrapper script which base64-decodes and renders the DSP creative inside a nested <code>#ctr</code> iframe.',
       '<strong>MRAID:</strong> A stub is injected before the adm so <code>window.mraid</code> calls don\'t throw.',
-      '<strong>nurl/lurl:</strong> Explicit win/loss notice URLs in the bid — use manual fire buttons. Not auto-fired on render.',
+      '<strong>nurl:</strong> Win notice — auto-fired immediately on parse, simulating the exchange confirming the auction win.',
       '<strong>burl:</strong> If present, this is our supply-side billing URL — the publisher is expected to fire it when a billable impression occurs.',
       '<strong>Click beacons:</strong> Fired inside the nested <code>#ctr</code> iframe — visible in DevTools Network tab.'
     ]
@@ -443,7 +443,7 @@ var TYPE_INFO = {
       '<strong>Format:</strong> Standard OpenRTB 2.x from the B+ (Smaato) ad server. The <code>adm</code> uses the same Verve wrapper script pattern as P+, rendering the DSP creative inside a nested <code>#ctr</code> iframe.',
       '<strong>burl:</strong> Supply-side billing notice — this is our URL that the publisher is expected to fire when a billable impression occurs. Fire it here to simulate publisher-side billing.',
       '<strong>nurl:</strong> Win notice — fired by us to confirm auction win. Present alongside <code>burl</code> in some responses.',
-      '<strong>lurl:</strong> Loss notice URL — manual fire button.',
+      '<strong>lurl:</strong> Loss notice URL — fire manually to simulate a lost auction.',
       '<strong>Tracking domain:</strong> <code>*.track.smaato.net</code> / <code>got-prod-gcp-ap-*.track.smaato.net</code>.',
       '<strong>Click beacons:</strong> Fired inside the nested <code>#ctr</code> iframe — visible in DevTools Network tab.'
     ]
@@ -456,7 +456,7 @@ var TYPE_INFO = {
       '<strong>Mode B — Direct MAX_ADM:</strong> Paste the raw APIv3 JSON (<code>{"status":"ok","ads":[...]}</code>) directly — detected automatically, no fetch needed.',
       '<strong>Verve impression beacons:</strong> <code>ext.imptrackers[]</code> are fired when the ad is <strong>≥50% visible for 1 continuous second</strong> — matching the IAB OMID standard used by the HyBid SDK.',
       '<strong>Click beacons:</strong> MAX_ADM <code>beacons[]</code> with type <code>click</code> are auto-fired when the ad is clicked. Also available as manual buttons.',
-      '<strong>nurl / lurl:</strong> Win/loss notice URLs from the oRTB bid — manual fire buttons only (not available in direct MAX_ADM mode).'
+      '<strong>nurl:</strong> Win notice — auto-fired on parse. <strong>lurl:</strong> Loss notice — manual fire to simulate a lost auction. Neither available in direct MAX_ADM mode.'
     ]
   }
 };
@@ -713,13 +713,13 @@ function showParsedOrtb(bid){
     prow('price',   bid.price.toFixed(4)+' '+bid.cur,'vcpm')+
     prow('crid',    bid.crid||'—')+
     prow('adomain', bid.adomain||'—')+
-    // P+/DSP: nurl is our win notice
-    (!isBplus ? prow('nurl', bid.nurl?'✓ present':'✗ none', bid.nurl?'':'vwarn') : '')+
+    // P+/DSP: nurl is our win notice — auto-fired on parse
+    (!isBplus ? prow('nurl', bid.nurl?'✓ present — auto-fired on parse':'✗ none', bid.nurl?'vdim':'vwarn') : '')+
     // P+/DSP: burl if present = our supply billing notice (publisher fires on render)
     (!isBplus && bid.burl ? prow('burl','✓ present (supply billing notice)') : '')+
     // B+: burl = supply billing notice publisher fires; nurl = our win notice
     (isBplus  ? prow('burl', bid.burl?'✓ present (supply billing notice)':'✗ none', bid.burl?'':'vwarn') : '')+
-    (isBplus && bid.nurl ? prow('nurl','✓ present (win notice)') : '')+
+    (isBplus && bid.nurl ? prow('nurl','✓ present — auto-fired on parse','vdim') : '')+
     (bid.lurl ? prow('lurl','✓ present') : '')+
     (hasMraid ? prow('mraid','⚠ stub injected','vwarn') : '')+
     (nib ? prow('ad format','native_in_banner — pubnative-wrapper template detected','vdim') : '')+
@@ -872,13 +872,17 @@ function buildApiv3Buttons(bid){
     btns.appendChild(btn);
   });
 
-  // nurl / lurl
-  if(bid.nurl){
-    var nb=document.createElement('button'); nb.className='btn-sm'; nb.textContent='🔔 Fire nurl (win notice)';
-    nb.title='Our supply-side win notice';    (function(b){ nb.onclick=function(){
-      var u=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
-      new Image().src=u; addBeacon('win',u,true);
-    };})(bid); btns.appendChild(nb);
+  // nurl — auto-fired on parse (simulates exchange win confirmation)
+  if(bid.nurl && !bid._nurlFired){
+    bid._nurlFired = true;
+    var nurlU = bid.nurl.replace(/\$\{AUCTION_PRICE\}/g,bid.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,bid.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,bid.price);
+    new Image().src = nurlU;
+    addBeacon('win', nurlU, true);
+    log('nurl auto-fired (auction win confirmed) → '+nurlU.slice(0,60)+'…','net');
+    var ni4 = document.createElement('div');
+    ni4.style.cssText = 'font-size:0.72rem;color:var(--green);padding:3px 0;';
+    ni4.innerHTML = '✓ nurl fired automatically (win confirmation)';
+    btns.appendChild(ni4);
   }
   if(bid.lurl){
     var lb=document.createElement('button'); lb.className='btn-sm'; lb.textContent='🔕 Fire lurl (loss)';
@@ -1129,15 +1133,21 @@ function buildNurlButtons(bid){
   var isBplus = bid._fmt === 'ortb-bplus';
   var isDsp   = bid._fmt === 'ortb-dsp';
 
-  // ── Type 1 (DSP) & Type 2 (P+): nurl = our win notice ──────────────────────
-  if(!isBplus && bid.nurl){
-    var nb=document.createElement('button'); nb.className='btn-sm';
-    nb.textContent='🔔 Fire nurl (win notice)';
-    nb.title='Our supply-side win notice — notify Verve that this bid won';
-    (function(b){ nb.onclick=function(){
-      var url=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
-      new Image().src=url; addBeacon('win',url,true);
-    };})(bid); btns.appendChild(nb);
+  // ── nurl — auto-fired on parse (simulates exchange win confirmation) ─────────
+  // In production, the exchange fires nurl immediately when the auction winner
+  // is confirmed — before the ad renders. We replicate this by firing it at
+  // parse time rather than requiring a manual button click.
+  if(!isBplus && bid.nurl && !bid._nurlFired){
+    bid._nurlFired = true;
+    var nurlUrl = bid.nurl.replace(/\$\{AUCTION_PRICE\}/g,bid.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,bid.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,bid.price);
+    new Image().src = nurlUrl;
+    addBeacon('win', nurlUrl, true);
+    log('nurl auto-fired (auction win confirmed) → '+nurlUrl.slice(0,60)+'…','net');
+    // Show a status indicator instead of a button
+    var ni = document.createElement('div');
+    ni.style.cssText = 'font-size:0.72rem;color:var(--green);padding:3px 0;';
+    ni.innerHTML = '✓ nurl fired automatically (win confirmation)';
+    btns.appendChild(ni);
   }
 
   // ── Type 1 (DSP) & Type 2 (P+): burl = our supply billing notice (publisher fires) ─
@@ -1162,15 +1172,17 @@ function buildNurlButtons(bid){
     };})(bid); btns.appendChild(bb2);
   }
 
-  // ── Type 3 (B+): nurl = win notice when also present ────────────────────────
-  if(isBplus && bid.nurl){
-    var nb2=document.createElement('button'); nb2.className='btn-sm';
-    nb2.textContent='🔔 Fire nurl (win notice)';
-    nb2.title='Win notice — confirms auction win';
-    (function(b){ nb2.onclick=function(){
-      var url=b.nurl.replace(/\$\{AUCTION_PRICE\}/g,b.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,b.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,b.price);
-      new Image().src=url; addBeacon('win',url,true);
-    };})(bid); btns.appendChild(nb2);
+  // ── Type 3 (B+): nurl = win notice — also auto-fired on parse ───────────────
+  if(isBplus && bid.nurl && !bid._nurlFired){
+    bid._nurlFired = true;
+    var nurlUrlB = bid.nurl.replace(/\$\{AUCTION_PRICE\}/g,bid.price).replace(/\$\{AUCTION_MIN_TO_WIN\}/g,bid.price).replace(/\$\{AUCTION_MINIMUM_BID_TO_WIN\}/g,bid.price);
+    new Image().src = nurlUrlB;
+    addBeacon('win', nurlUrlB, true);
+    log('nurl auto-fired (auction win confirmed) → '+nurlUrlB.slice(0,60)+'…','net');
+    var ni2 = document.createElement('div');
+    ni2.style.cssText = 'font-size:0.72rem;color:var(--green);padding:3px 0;';
+    ni2.innerHTML = '✓ nurl fired automatically (win confirmation)';
+    btns.appendChild(ni2);
   }
 
   // ── lurl — all types ─────────────────────────────────────────────────────────
@@ -1999,7 +2011,7 @@ var EXAMPLES = {
   'ortb-dsp': '{"id":"5004510c000000009ea9e5a4c924ac7b","seatbid":[{"bid":[{"id":"5b590ef721c33c4b56b9b98332ca07cf","impid":"3e05510c-0000-0000-9ea9-e5a4c924ac7b","price":0.38422,"nurl":"https://sh2b-ue101.imptracking.com/?c=e&m=nurl&auctionId=c5ad8a550fe4652ebfa29c28a4cb804e&price=${AUCTION_PRICE}","burl":"https://sh2b-ue101.imptracking.com/?c=e&m=b&key=c5ad8a550fe4652ebfa29c28a4cb804e&cp=${AUCTION_PRICE}","adm":"<span id=\\"adtest\\"><img src=\\"https://example.com/imp?id=123\\" width=\\"1\\" height=\\"1\\" style=\\"position:absolute;opacity:0\\"/><a href=\\"https://example.com/click?id=123\\" target=\\"_blank\\"><img src=\\"https://via.placeholder.com/320x50/1a3a6a/ffffff?text=DSP+Banner+320x50\\" width=\\"320\\" height=\\"50\\" border=\\"0\\"/></a></span>","adomain":["example.com"],"crid":"test-dsp-crid","w":320,"h":50}],"seat":"test"}],"cur":"USD"}',
   'ortb-verve': '{"id":"34CB5D0C-13AC-4C6D-B5D5-152C5176C015","seatbid":[{"bid":[{"id":"3baab70a-0000-0000-ae89-2b9699b86a98","impid":"3EB0545D-3CA3-4D5D-A81A-D4CD22A36F15","price":0.129,"nurl":"https://got.prod-gcp-eu-west4-1.pubnative.net/v2/winnotice?ap=${AUCTION_PRICE}&amtw=${AUCTION_MIN_TO_WIN}&t=H4YijYjfgUNz802jvgA","lurl":"https://got.prod-gcp-eu-west4-1.pubnative.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YijYjfgUNz802jvgA&al=${AUCTION_LOSS}","adm":"<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:black;}</style><a href=\\"https://example.com/click\\" target=\\"_blank\\"><img src=\\"https://via.placeholder.com/320x50/040532/5cb3ff?text=Verve+oRTB+320x50\\" width=\\"320\\" height=\\"50\\" border=\\"0\\"/></a>","adomain":["alltrails.com"],"crid":"6820728","w":320,"h":50}]}],"bidid":"7ed62795","cur":"USD"}',
   'ortb-bplus': '{"id":"3f50db9d-6366-4c08-9c63-0747254f3a5f","seatbid":[{"bid":[{"id":"3b9ea41e-0000-0000-94e4-454e1ab6a237","impid":"809eb91c-9da6-4968-9ece-46b41442d9c8","price":0.17,"lurl":"https://got-prod-gcp-ap-southeast1-2.track.smaato.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YikxmPbWYN7hMUHetMA4OkkyU-Bd9jgoGF&al=${AUCTION_LOSS}","adm":"<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#1a1a2a;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style><div style=\\"text-align:center;color:#fff;padding:20px\\"><div style=\\"font-size:18px;font-weight:700;margin-bottom:8px\\">B+ (Smaato)</div><div style=\\"font-size:12px;color:#9ab0c8\\">oRTB B+ Ad Response — 300x250</div></div>","adomain":["monsterlegendsgame.com"],"burl":"https://got-prod-gcp-ap-southeast1-2.track.smaato.net/v2/impression?aid=3107869&t=H4YikxmPbWYN7hMUHetMA4OkkyU-Bd9jgoGF&px=1&ap=${AUCTION_PRICE}","crid":"394622","w":300,"h":250}]}],"bidid":"6a7b6fb3","cur":"USD"}',
-  'apiv3': '{"id":"b0ac11a6-9033-428a-a9a9-b1f1c45c9521","seatbid":[{"bid":[{"id":"6caa6307-0000-0000-9f2b-265ebb517c99","impid":"1","price":0.082,"adid":"7a462d671329","nurl":"https://got.iad3rs0zonea.pubnative.net/v2/winnotice?ap=${AUCTION_PRICE}&amtw=${AUCTION_MINIMUM_BID_TO_WIN}&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA","lurl":"https://got.iad3rs0zonea.pubnative.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA&al=${AUCTION_LOSS}","adomain":["familydollar.com"],"crid":"137122|1dc7b9459908457bb81e1b22ad28fc0c|30459","w":320,"h":50,"ext":{"crtype":"MRAID 2.0","imptrackers":["https://got.iad3rs0zonea.pubnative.net/v2/impression?aid=2014003&t=H4YijjXfgIpw-E4Ry_1_fAN-UaZSiUSOQOJZIA&px=1&ap=${AUCTION_PRICE}"],"signaldata":"{\\\"status\\\":\\\"ok\\\",\\\"tagid\\\":\\\"2014003-1-1\\\",\\\"admurl\\\":\\\"https://api.iad3rs0zonea.pubnative.net/api/max/cache?t=H4YijjXfgIskkw4ECi4DNDwDtHS-AaNcS5AiwEWR\\\\u0026x=1007949\\\",\\\"format\\\":\\\"Banner\\\"}"}]}]}],"bidid":"54e508d3","cur":"USD"}'
+  'apiv3': '{"id":"b33c56f0-0d82-4559-a124-81a804c9b8d6","seatbid":[{"bid":[{"id":"fd41c23f-0000-0000-b218-9e835a2726b0","impid":"1","price":0.039,"adid":"120887","nurl":"https://got.prod-gcp-ap-southeast1-1.pubnative.net/v2/winnotice?ap=${AUCTION_PRICE}&amtw=${AUCTION_MINIMUM_BID_TO_WIN}&t=H4YjYuqPgjpU7b4MMo4A73wDnS0p0zOUIACigJE","lurl":"https://got.prod-gcp-ap-southeast1-1.pubnative.net/v2/lossnotice?ap=${AUCTION_PRICE}&t=H4YjYuqPgjpU7b4MMo4A73wDnS0p0zOUIACigJE&al=${AUCTION_LOSS}","adomain":["com.devsisters.ck"],"bundle":"com.devsisters.ck","cid":"2183","crid":"120887","cat":["IAB9-25"],"w":320,"h":50,"ext":{"imptrackers":["https://got.prod-gcp-ap-southeast1-1.pubnative.net/v2/impression?aid=4946012&t=H4YjYuqPgjpU7b4MMo4A73wDnS0p0zOUIACigJE&px=1&ap=${AUCTION_PRICE}"],"signaldata":"{\\"status\\":\\"ok\\",\\"tagid\\":\\"4946012-2-1\\",\\"admurl\\":\\"https://api.prod-gcp-ap-southeast1-1.pubnative.net/api/max/cache?t=H4YjYuqPgjFrFo4DUV4ANDwDgUfKxgmi02CykjA\\\\u0026x=1007978\\",\\"format\\":\\"Banner\\"}"}}]}],"bidid":"628a267c-eb9b-4723-b1d3-9659e1f1b006","cur":"USD"}'
 };
 
 function loadExample(){
